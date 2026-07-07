@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>オセロ通信テスト</title>
+    <title>オセロ＆クイズ通信テスト</title>
     <style>
         body {
             display: flex;
@@ -14,6 +14,37 @@
             color: #333;
         }
 
+        /* 各画面のコンテナ */
+        .screen {
+            display: none; /* デフォルトは非表示 */
+            flex-direction: column;
+            align-items: center;
+        }
+        .active {
+            display: flex; /* activeクラスがついたものだけ表示 */
+        }
+
+        /* タイトル画面のスタイル */
+        .title-box {
+            background-color: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .match-btn {
+            padding: 15px 30px;
+            font-size: 1.2em;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+        .match-btn:hover { background-color: #0056b3; }
+
+        /* ゲーム画面のスタイル（前回と同じ） */
         .info-panel {
             margin-bottom: 20px;
             text-align: center;
@@ -22,7 +53,6 @@
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
-
         #board {
             display: grid;
             grid-template-columns: repeat(6, 50px);
@@ -33,45 +63,42 @@
             box-shadow: 0 8px 16px rgba(0,0,0,0.3);
             border-radius: 4px;
         }
-        
         .cell {
-            width: 50px;
-            height: 50px;
+            width: 50px; height: 50px;
             background-color: #228b22;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            display: flex; align-items: center; justify-content: center;
             cursor: pointer;
         }
-        
-        .cell:hover {
-            background-color: #2a9e2a;
-        }
-
-        .disk {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-        }
+        .cell:hover { background-color: #2a9e2a; }
+        .disk { width: 40px; height: 40px; border-radius: 50%; }
         .black { background-color: black; }
         .white { background-color: white; }
     </style>
 </head>
 <body>
-    <h2>オセロ (6x6) テスト画面</h2>
-    
-    <div class="info-panel">
-        <div>
-            <strong>あなたのID: </strong>
-            <select id="playerId">
-                <option value="p1">p1 (黒)</option>
-                <option value="p2">p2 (白)</option>
-            </select>
+
+    <div id="titleScreen" class="screen active">
+        <div class="title-box">
+            <h1>オセロ × クイズ (6x6)</h1>
+            <p>知識と戦略で盤面を制圧せよ</p>
+            <button id="matchBtn" class="match-btn">オンライン対戦を探す</button>
         </div>
-        <div id="status" style="margin-top: 10px; font-size: 1.2em; font-weight: bold;">現在のターン: -</div>
     </div>
-    
-    <div id="board"></div>
+
+    <div id="waitingScreen" class="screen">
+        <div class="title-box">
+            <h2>対戦相手を探しています...</h2>
+            <p>少々お待ちください ⏳</p>
+        </div>
+    </div>
+
+    <div id="gameScreen" class="screen">
+        <div class="info-panel">
+            <div id="myColor" style="font-size: 1.1em; color: #555;">あなたは: -</div>
+            <div id="status" style="margin-top: 10px; font-size: 1.3em; font-weight: bold;">現在のターン: -</div>
+        </div>
+        <div id="board"></div>
+    </div>
 
     <script src="main.js"></script>
 </body>
