@@ -63,3 +63,28 @@ def get_flippable_disks(board, x, y, player):
             flippable.extend(temp_flippable)
 
     return flippable
+
+def has_valid_moves(board, player):
+    """
+    指定したプレイヤーが盤面のどこかに石を置けるか判定する
+    """
+    for y in range(6):
+        for x in range(6):
+            if board[y][x] == 0: # 空のマスなら
+                if len(get_flippable_disks(board, x, y, player)) > 0:
+                    return True # 1つでも置ける場所があればTrue
+    return False
+
+def get_score(board):
+    """
+    黒(1)と白(2)の石の数を数える
+    """
+    black = 0
+    white = 0
+    for row in board:
+        for cell in row:
+            if cell == 1:
+                black += 1
+            elif cell == 2:
+                white += 1
+    return {"black": black, "white": white}
