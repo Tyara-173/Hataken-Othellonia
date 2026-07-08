@@ -2,13 +2,14 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 import json
 import uuid
 from othello_logic import get_flippable_disks, has_valid_moves, get_score
+from quiz_data import create_quiz_board
 
 app = FastAPI()
 
-# マッチング待ちのプレイヤー
-waiting_player = None
+# マッチング待ちのプレイヤーをカテゴリ別に保持
+waiting_players = {}
 
-# 進行中のゲームルーム { room_id: { "players": [ws1, ws2], "board": [...], "turn": 1 } }
+# 進行中のゲームルーム { room_id: { "players": [ws1, ws2], "board": [...], "turn": 1, "quiz_board": [...], "category": "..." } }
 active_rooms = {}
 
 def create_initial_board():
@@ -23,36 +24,117 @@ def create_initial_board():
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    global waiting_player
     await websocket.accept()
 
-    # --- マッチング処理 ---
-    if waiting_player is None:
-        # 待っている人がいなければ、自分が待つ
-        waiting_player = websocket
-        await websocket.send_text(json.dumps({"type": "waiting"}))
-    else:
-        # 待っている人がいれば、マッチング成立！
-        room_id = str(uuid.uuid4())
-        player1 = waiting_player
-        player2 = websocket
-        waiting_player = None # 待合室を空にする
+    try:
+        while True:
+            data = await websocket.receive_text()
+            payload = json.loads(data)
 
-        # ルームを作成
-        active_rooms[room_id] = {
-            "players": [player1, player2],
-            "board": create_initial_board(),
-            "turn": 1 # 1: 黒(p1), 2: 白(p2)
-        }
+            if payload["action"] == "join_queue":
+                category = payload.get("category", "一般常識")
+                if category not in waiting_players:
+                    waiting_players[category] = None
+                if waiting_players[category] is None:
+                    waiting_players[category] = websocket
+                    await websocket.send_text(json.dumps({"type": "waiting", "category": category}))
+                    continue
 
-        # プレイヤー1(黒)に開始通知
-        await player1.send_text(json.dumps({
-            "type": "start", "room_id": room_id, "color": 1, "board": active_rooms[room_id]["board"], "turn": 1
-        }))
-        # プレイヤー2(白)に開始通知
-        await player2.send_text(json.dumps({
-            "type": "start", "room_id": room_id, "color": 2, "board": active_rooms[room_id]["board"], "turn": 1
-        }))
+                # 同じカテゴリの待機プレイヤーとマッチング
+                room_id = str(uuid.uuid4())
+                player1 = waiting_players[category]
+                player2 = websocket
+                waiting_players[category] = None
+
+                quiz_board = create_quiz_board(category)
+                room = {
+                    "players": [player1, player2],
+                    "board": create_initial_board(),
+                    "quiz_board": quiz_board,
+                    "category": category,
+                    "turn": 1,
+                }
+                active_rooms[room_id] = room
+
+                await player1.send_text(json.dumps({
+                    "type": "start",
+                    "room_id": room_id,
+                    "color": 1,
+                    "board": room["board"],
+                    "turn": 1,
+                    "category": category,
+                    "quiz_board": quiz_board,
+                }))
+                await player2.send_text(json.dumps({
+                    "type": "start",
+                    "room_id": room_id,
+                    "color": 2,
+                    "board": room["board"],
+                    "turn": 1,
+                    "category": category,
+                    "quiz_board": quiz_board,
+                }))
+
+            elif payload["action"] == "click_cell":
+                room_id = payload["room_id"]
+                room = active_rooms.get(room_id)
+                if not room:
+                    continue
+
+                color = payload["color"]
+                x, y = payload["x"], payload["y"]
+
+                if room["turn"] != color:
+                    continue
+
+                flippable = get_flippable_disks(room["board"], x, y, color)
+                if len(flippable) > 0:
+                    room["board"][y][x] = color
+                    for fx, fy in flippable:
+                        room["board"][fy][fx] = color
+
+                    next_turn = 2 if color == 1 else 1
+                    message = ""
+                    game_over = False
+
+                    if not has_valid_moves(room["board"], next_turn):
+                        if not has_valid_moves(room["board"], color):
+                            game_over = True
+                            message = "お互いに置ける場所がありません。"
+                        else:
+                            pass_color = "白" if next_turn == 2 else "黒"
+                            message = f"{pass_color}は置ける場所がないためパスされました！"
+                            next_turn = color
+
+                    if not any(0 in row for row in room["board"]):
+                        game_over = True
+
+                    room["turn"] = next_turn
+                    score = get_score(room["board"])
+
+                    if game_over:
+                        if score["black"] > score["white"]:
+                            message += f" 黒の勝ち！ ({score['black']} 対 {score['white']})"
+                        elif score["white"] > score["black"]:
+                            message += f" 白の勝ち！ ({score['white']} 対 {score['black']})"
+                        else:
+                            message += f" 引き分け！ ({score['black']} 対 {score['white']})"
+
+                    update_msg = json.dumps({
+                        "type": "update",
+                        "board": room["board"],
+                        "turn": room["turn"],
+                        "score": score,
+                        "message": message,
+                        "game_over": game_over,
+                    })
+                    for p in room["players"]:
+                        await p.send_text(update_msg)
+    except WebSocketDisconnect:
+        for category, waiting in list(waiting_players.items()):
+            if waiting == websocket:
+                waiting_players[category] = None
+                break
 
     try:
         while True:
