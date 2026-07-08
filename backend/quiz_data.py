@@ -1,7 +1,9 @@
 import json
+import logging
 import os
 import random
 
+logger = logging.getLogger(__name__)
 QUIZ_ROOT = os.path.join(os.path.dirname(__file__), "quiz")
 CATEGORY_DIR_MAP = {
     "漢字": "Kanji",
@@ -14,23 +16,66 @@ DIFFICULTY_FOLDERS = {
 }
 
 
+def _normalize_answer(answer, choices):
+    if isinstance(answer, int):
+        return answer - 1
+    if isinstance(answer, str):
+        answer = answer.strip()
+        if answer.isdigit():
+            return int(answer) - 1
+        letters = {"A": 0, "B": 1, "C": 2, "D": 3}
+        if answer.upper() in letters:
+            return letters[answer.upper()]
+        if answer in choices:
+            return choices.index(answer)
+    return None
+
+
 def _load_questions_from_file(file_path):
-    with open(file_path, encoding="utf-8") as f:
-        raw = json.load(f)
+    try:
+        with open(file_path, encoding="utf-8") as f:
+            raw = json.load(f)
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        logger.warning("Skipping invalid quiz file %s: %s", file_path, exc)
+        return None
+    except OSError as exc:
+        logger.warning("Unable to read quiz file %s: %s", file_path, exc)
+        return None
+
+    if not isinstance(raw, dict):
+        logger.warning("Skipping quiz file %s because top-level JSON is not an object", file_path)
+        return None
 
     question = raw.get("Question") or raw.get("question")
     choices = raw.get("Options") or raw.get("choices") or []
     answer = raw.get("Answer") if "Answer" in raw else raw.get("answer")
 
-    if isinstance(answer, str) and answer.isdigit():
-        answer = int(answer)
-    if isinstance(answer, int):
-        answer = answer - 1
+    if not isinstance(choices, list):
+        choices = []
+    choices = [str(item) for item in choices if item is not None]
+
+    answer_index = _normalize_answer(answer, choices)
+    if answer_index is None or answer_index < 0 or answer_index >= len(choices):
+        logger.warning("Skipping quiz file %s because answer is invalid", file_path)
+        return None
+
+    if not question or not isinstance(question, str):
+        logger.warning("Skipping quiz file %s because question text is missing", file_path)
+        return None
+
+    question_text = question.strip()
+    if not question_text:
+        logger.warning("Skipping quiz file %s because question text is empty", file_path)
+        return None
+
+    if len(choices) < 2:
+        logger.warning("Skipping quiz file %s because it has fewer than 2 choices", file_path)
+        return None
 
     return {
-        "question": question,
+        "question": question_text,
         "choices": choices,
-        "answer": answer,
+        "answer": answer_index,
     }
 
 
@@ -51,7 +96,7 @@ def load_quiz_bank():
                         continue
                     file_path = os.path.join(diff_path, file_name)
                     loaded = _load_questions_from_file(file_path)
-                    if loaded["question"] and loaded["choices"] and loaded["answer"] is not None:
+                    if loaded is not None:
                         questions.append(loaded)
             bank[category_name][diff_key] = questions
     return bank
