@@ -11,31 +11,36 @@ function showScreen(screenId) {
 
 // 「オンライン対戦を探す」ボタンを押した時の処理
 document.getElementById('matchBtn').addEventListener('click', () => {
+    showScreen('categoryScreen');
+});
+
+document.getElementById('startMatchBtn').addEventListener('click', () => {
+    const category = document.getElementById('categorySelect').value;
     showScreen('waitingScreen');
-    
-    // ここでWebSocketに接続
+
     ws = new WebSocket("ws://localhost:8000/ws");
-    
+
+    ws.onopen = () => {
+        ws.send(JSON.stringify({ action: 'join_queue', category }));
+    };
+
     ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
-        
+
         if (data.type === "waiting") {
-            // 待機中のまま（UI変更なし）
-            console.log("対戦相手を待っています...");
-        } 
+            console.log(`「${data.category}」ジャンルの対戦相手を待っています...`);
+        }
         else if (data.type === "start") {
-            // マッチング成立！ゲーム画面へ
             myRoomId = data.room_id;
             myColor = data.color;
             showScreen('gameScreen');
-            
+
             const colorName = myColor === 1 ? "黒 (先手)" : "白 (後手)";
             document.getElementById('myColor').textContent = `あなたは: ${colorName}`;
-            
+            document.getElementById('status').textContent = `ジャンル: ${data.category}`;
             renderBoard(data.board, data.turn);
         }
         else if (data.type === "update") {
-            // 盤面の更新
             renderBoard(data.board, data.turn);
         }
     };
