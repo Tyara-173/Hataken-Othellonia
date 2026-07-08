@@ -29,6 +29,7 @@ document.getElementById('startMatchBtn').addEventListener('click', () => {
 
         if (data.type === "waiting") {
             console.log(`「${data.category}」ジャンルの対戦相手を待っています...`);
+            document.getElementById('gameMessage').textContent = `ジャンル「${data.category}」の対戦相手を待っています...`;
         }
         else if (data.type === "start") {
             myRoomId = data.room_id;
@@ -38,13 +39,54 @@ document.getElementById('startMatchBtn').addEventListener('click', () => {
             const colorName = myColor === 1 ? "黒 (先手)" : "白 (後手)";
             document.getElementById('myColor').textContent = `あなたは: ${colorName}`;
             document.getElementById('status').textContent = `ジャンル: ${data.category}`;
+            document.getElementById('gameMessage').textContent = "問題をクリックして回答してください。";
             renderBoard(data.board, data.turn);
+        }
+        else if (data.type === "question_prompt") {
+            showQuestion(data);
         }
         else if (data.type === "update") {
             renderBoard(data.board, data.turn);
+            hideQuestion();
+            if (data.message) {
+                document.getElementById('gameMessage').textContent = data.message;
+            }
+        }
+        else if (data.type === "invalid_move") {
+            document.getElementById('gameMessage').textContent = data.message;
         }
     };
 });
+
+function showQuestion(data) {
+    const panel = document.getElementById('questionPanel');
+    document.getElementById('difficultyTag').textContent = `難易度: ${data.difficulty}`;
+    document.getElementById('questionText').textContent = data.question;
+    const container = document.getElementById('choicesContainer');
+    container.innerHTML = '';
+
+    data.choices.forEach(choice => {
+        const btn = document.createElement('button');
+        btn.className = 'choice-btn';
+        btn.textContent = choice.label;
+        btn.onclick = () => {
+            ws.send(JSON.stringify({
+                action: 'answer_question',
+                room_id: myRoomId,
+                color: myColor,
+                selected_index: choice.index,
+            }));
+        };
+        container.appendChild(btn);
+    });
+
+    panel.style.display = 'block';
+}
+
+function hideQuestion() {
+    const panel = document.getElementById('questionPanel');
+    panel.style.display = 'none';
+}
 
 // 盤面の描画関数
 function renderBoard(board, currentTurn) {

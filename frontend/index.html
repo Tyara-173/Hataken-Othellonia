@@ -73,6 +73,39 @@
         .disk { width: 40px; height: 40px; border-radius: 50%; }
         .black { background-color: black; }
         .white { background-color: white; }
+        .question-panel {
+            width: 100%;
+            max-width: 360px;
+            background-color: #fff;
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+            margin-bottom: 16px;
+            text-align: left;
+        }
+        .difficulty-tag {
+            font-size: 0.9em;
+            color: #444;
+            margin-bottom: 8px;
+        }
+        .question-text {
+            font-size: 1.05em;
+            margin-bottom: 12px;
+        }
+        .choices-container {
+            display: grid;
+            gap: 8px;
+        }
+        .choice-btn {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 10px;
+            cursor: pointer;
+            text-align: left;
+        }
+        .choice-btn:hover { background-color: #0056b3; }
     </style>
 </head>
 <body>
@@ -109,6 +142,12 @@
         <div class="info-panel">
             <div id="myColor" style="font-size: 1.1em; color: #555;">あなたは: -</div>
             <div id="status" style="margin-top: 10px; font-size: 1.3em; font-weight: bold;">現在のターン: -</div>
+            <div id="gameMessage" style="margin-top: 8px; color: #555;"></div>
+        </div>
+        <div id="questionPanel" class="question-panel" style="display:none;">
+            <div id="difficultyTag" class="difficulty-tag"></div>
+            <div id="questionText" class="question-text"></div>
+            <div id="choicesContainer" class="choices-container"></div>
         </div>
         <div id="board"></div>
     </div>
