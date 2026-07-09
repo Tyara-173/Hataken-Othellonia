@@ -16,12 +16,13 @@ document.getElementById('matchBtn').addEventListener('click', () => {
 
 document.getElementById('startMatchBtn').addEventListener('click', () => {
     const category = document.getElementById('categorySelect').value;
+    const username = document.getElementById('usernameInput').value.trim() || '名無し';
     showScreen('waitingScreen');
 
     ws = new WebSocket("ws://localhost:8000/ws");
 
     ws.onopen = () => {
-        ws.send(JSON.stringify({ action: 'join_queue', category }));
+        ws.send(JSON.stringify({ action: 'join_queue', category, username }));
     };
 
     ws.onmessage = (event) => {
@@ -38,6 +39,7 @@ document.getElementById('startMatchBtn').addEventListener('click', () => {
 
             const colorName = myColor === 1 ? "黒 (先手)" : "白 (後手)";
             document.getElementById('myColor').textContent = `あなたは: ${colorName}`;
+            document.getElementById('playerNames').textContent = `プレイヤー: 先手 ${data.player_names['1']} / 後手 ${data.player_names['2']}`;
             document.getElementById('status').textContent = `ジャンル: ${data.category}`;
             document.getElementById('gameMessage').textContent = "問題をクリックして回答してください。";
             renderBoard(data.board, data.turn);

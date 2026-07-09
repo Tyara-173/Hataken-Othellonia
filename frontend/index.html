@@ -114,6 +114,10 @@
         <div class="title-box">
             <h1>オセロ × クイズ (6x6)</h1>
             <p>知識と戦略で盤面を制圧せよ</p>
+            <div style="margin: 16px 0; text-align: left;">
+                <label for="usernameInput" style="display:block; margin-bottom:6px; font-weight:600;">プレイヤー名</label>
+                <input id="usernameInput" type="text" placeholder="名前を入力してください" style="width:100%; padding:10px; border:1px solid #ccc; border-radius:8px; font-size:1em;" />
+            </div>
             <button id="matchBtn" class="match-btn">オンライン対戦を探す</button>
         </div>
     </div>
@@ -138,7 +142,8 @@
 
     <div id="gameScreen" class="screen">
         <div class="info-panel">
-            <div id="myColor" style="font-size: 1.1em; color: #555;">あなたは: -</div>
+            <div id="playerNames" style="font-size: 1.1em; color: #555;">プレイヤー: -</div>
+            <div id="myColor" style="font-size: 1.1em; color: #555; margin-top: 6px;">あなたは: -</div>
             <div id="status" style="margin-top: 10px; font-size: 1.3em; font-weight: bold;">現在のターン: -</div>
             <div id="gameMessage" style="margin-top: 8px; color: #555;"></div>
         </div>

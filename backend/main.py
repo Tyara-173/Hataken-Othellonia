@@ -7,9 +7,10 @@ from quiz_data import create_quiz_board
 app = FastAPI()
 
 # マッチング待ちのプレイヤーをカテゴリ別に保持
+# 値は { "ws": WebSocket, "username": str } か None
 waiting_players = {}
 
-# 進行中のゲームルーム { room_id: { "players": [ws1, ws2], "board": [...], "turn": 1, "quiz_board": [...], "category": "..." } }
+# 進行中のゲームルーム { room_id: { "players": [ws1, ws2], "board": [...], "turn": 1, "quiz_board": [...], "category": "...", "usernames": [name1, name2] } }
 active_rooms = {}
 
 def create_initial_board():
@@ -50,21 +51,25 @@ async def websocket_endpoint(websocket: WebSocket):
 
             if action == "join_queue":
                 category = payload.get("category", "一般常識")
+                username = payload.get("username", "名無し") or "名無し"
                 if category not in waiting_players:
                     waiting_players[category] = None
                 if waiting_players[category] is None:
-                    waiting_players[category] = websocket
+                    waiting_players[category] = {"ws": websocket, "username": username}
                     await websocket.send_text(json.dumps({"type": "waiting", "category": category}))
                     continue
 
                 room_id = str(uuid.uuid4())
-                player1 = waiting_players[category]
+                player1 = waiting_players[category]["ws"]
                 player2 = websocket
+                player1_name = waiting_players[category]["username"]
+                player2_name = username
                 waiting_players[category] = None
 
                 quiz_board = create_quiz_board(category)
                 room = {
                     "players": [player1, player2],
+                    "usernames": [player1_name, player2_name],
                     "board": create_initial_board(),
                     "quiz_board": quiz_board,
                     "category": category,
@@ -84,6 +89,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         "turn": 1,
                         "category": category,
                         "quiz_board": quiz_board,
+                        "player_names": {"1": room["usernames"][0], "2": room["usernames"][1]},
                     }))
 
             elif action == "click_cell":
@@ -244,6 +250,6 @@ async def websocket_endpoint(websocket: WebSocket):
 
     except WebSocketDisconnect:
         for category, waiting in list(waiting_players.items()):
-            if waiting == websocket:
+            if waiting and waiting.get("ws") == websocket:
                 waiting_players[category] = None
                 break
