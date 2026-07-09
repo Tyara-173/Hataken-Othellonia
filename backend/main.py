@@ -1,8 +1,8 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 import json
 import uuid
-from .othello_logic import get_flippable_disks, has_valid_moves, get_score
-from .quiz_data import create_quiz_board
+from othello_logic import get_flippable_disks, has_valid_moves, get_score
+from quiz_data import create_quiz_board
 
 app = FastAPI()
 
