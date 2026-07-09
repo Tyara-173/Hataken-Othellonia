@@ -68,8 +68,13 @@
             background-color: #228b22;
             display: flex; align-items: center; justify-content: center;
             cursor: pointer;
+            transition: box-shadow 0.2s ease, background-color 0.2s ease;
         }
         .cell:hover { background-color: #2a9e2a; }
+        .cell.highlight {
+            box-shadow: 0 0 0 3px rgba(255, 235, 59, 0.9);
+            background-color: #85bb65;
+        }
         .disk { width: 40px; height: 40px; border-radius: 50%; }
         .black { background-color: black; }
         .white { background-color: white; }

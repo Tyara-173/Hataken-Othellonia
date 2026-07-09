@@ -42,13 +42,13 @@ document.getElementById('startMatchBtn').addEventListener('click', () => {
             document.getElementById('playerNames').textContent = `プレイヤー: 先手 ${data.player_names['1']} / 後手 ${data.player_names['2']}`;
             document.getElementById('status').textContent = `ジャンル: ${data.category}`;
             document.getElementById('gameMessage').textContent = "問題をクリックして回答してください。";
-            renderBoard(data.board, data.turn);
+            renderBoard(data.board, data.turn, data.available_moves);
         }
         else if (data.type === "question_prompt") {
             showQuestion(data);
         }
         else if (data.type === "update") {
-            renderBoard(data.board, data.turn);
+            renderBoard(data.board, data.turn, data.available_moves);
             hideQuestion();
             if (data.message) {
                 document.getElementById('gameMessage').textContent = data.message;
@@ -91,7 +91,7 @@ function hideQuestion() {
 }
 
 // 盤面の描画関数
-function renderBoard(board, currentTurn) {
+function renderBoard(board, currentTurn, availableMoves) {
     const boardDiv = document.getElementById("board");
     const statusDiv = document.getElementById("status");
     
@@ -107,6 +107,7 @@ function renderBoard(board, currentTurn) {
         statusDiv.style.color = "#333";
     }
 
+    const availableSet = new Set((availableMoves || []).map(move => `${move.x},${move.y}`));
     boardDiv.innerHTML = ""; // リセット
 
     for (let y = 0; y < 6; y++) {
@@ -115,6 +116,10 @@ function renderBoard(board, currentTurn) {
             const cellDiv = document.createElement("div");
             cellDiv.className = "cell";
             
+            if (availableSet.has(`${x},${y}`) && currentTurn === myColor) {
+                cellDiv.classList.add("highlight");
+            }
+
             if (cellValue === 1 || cellValue === 2) {
                 const diskDiv = document.createElement("div");
                 diskDiv.className = "disk " + (cellValue === 1 ? "black" : "white");

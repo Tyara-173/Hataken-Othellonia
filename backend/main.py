@@ -1,7 +1,7 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 import json
 import uuid
-from othello_logic import get_flippable_disks, has_valid_moves, get_score
+from othello_logic import get_flippable_disks, has_valid_moves, get_score, get_available_moves
 from quiz_data import create_quiz_board
 
 app = FastAPI()
@@ -90,6 +90,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         "category": category,
                         "quiz_board": quiz_board,
                         "player_names": {"1": room["usernames"][0], "2": room["usernames"][1]},
+                        "available_moves": get_available_moves(room["board"], room["turn"]),
                     }))
 
             elif action == "click_cell":
@@ -125,6 +126,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         "score": score,
                         "message": message,
                         "game_over": game_over,
+                        "available_moves": get_available_moves(room["board"], room["turn"]),
                     })
                     for p in room["players"]:
                         await p.send_text(update_msg)
@@ -235,6 +237,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     "score": score,
                     "message": message,
                     "game_over": game_over,
+                    "available_moves": get_available_moves(room["board"], room["turn"]),
                 })
                 for p in room["players"]:
                     await p.send_text(update_msg)

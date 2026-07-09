@@ -50,6 +50,21 @@ def has_valid_moves(board, player, excluded_positions=None):
                     return True
     return False
 
+
+def get_available_moves(board, player, excluded_positions=None):
+    if excluded_positions is None:
+        excluded_positions = set()
+    else:
+        excluded_positions = set(excluded_positions)
+
+    available = []
+    for y in range(6):
+        for x in range(6):
+            if board[y][x] == 0 and (x, y) not in excluded_positions:
+                if len(get_flippable_disks(board, x, y, player)) > 0:
+                    available.append({"x": x, "y": y})
+    return available
+
 def get_score(board):
     """
     黒(1)と白(2)の石の数を数える
