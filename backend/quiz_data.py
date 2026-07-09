@@ -73,6 +73,7 @@ def _load_questions_from_file(file_path):
         return None
 
     return {
+        "id": os.path.relpath(file_path, QUIZ_ROOT).replace("\\", "/"),
         "question": question_text,
         "choices": choices,
         "answer": answer_index,
@@ -114,35 +115,41 @@ def difficulty_for_cell(x, y):
         return "hard"
     if (x,y) in [(1,2),(1,3),(2,1),(2,4),(3,1),(3,4),(4,2),(4,3)]:
         return "easy"
+    if (2 <= x <= 3) and (2 <= y <= 3):
+        return "none"
     return "normal"
-
-
-def pick_question(category, difficulty, excluded_indices=None):
-    """問題プールからランダムに1問を選ぶ"""
-    pool = QUIZ_BANK.get(category, {}).get(difficulty, [])
-    if not pool and DEFAULT_CATEGORY:
-        pool = QUIZ_BANK.get(DEFAULT_CATEGORY, {}).get(difficulty, [])
-    if not pool:
-        return None
-    if excluded_indices:
-        available = [q for idx, q in enumerate(pool) if idx not in excluded_indices]
-    else:
-        available = list(pool)
-    if not available:
-        return None
-    return random.choice(available)
-
 
 def create_quiz_board(category):
     """6x6のクイズボードを生成する"""
+    easy_questions = QUIZ_BANK.get(category, {}).get("easy", [])
+    normal_questions = QUIZ_BANK.get(category, {}).get("normal", [])
+    hard_questions = QUIZ_BANK.get(category, {}).get("hard", [])
+
+    random.shuffle(easy_questions)
+    random.shuffle(normal_questions)
+    random.shuffle(hard_questions)
+    print(normal_questions,len(normal_questions))
+    easy_iter = iter(easy_questions)
+    normal_iter = iter(normal_questions)
+    hard_iter = iter(hard_questions)
     board = []
+    used_question_ids = set()
     for y in range(6):
         row = []
         for x in range(6):
             difficulty = difficulty_for_cell(x, y)
-            question = pick_question(category, difficulty)
+            if difficulty == "easy":
+                question = next(easy_iter, None)
+            elif difficulty == "normal":
+                question = next(normal_iter, None)  
+            elif difficulty == "hard":
+                question = next(hard_iter, None)
+            else:
+                continue  # 難易度が "none" の場合はスキップ
+            print(x,y,question)
             if question is None:
-                question = pick_question(DEFAULT_CATEGORY, difficulty)
+                raise RuntimeError(f"不足しています: {category} の {difficulty} で一意なクイズが足りません。")
+            used_question_ids.add(question.get("id"))
             row.append({
                 "question": question["question"],
                 "choices": question["choices"],
