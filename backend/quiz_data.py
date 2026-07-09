@@ -109,13 +109,12 @@ DIFFICULTIES = ["easy", "normal", "hard"]
 
 def difficulty_for_cell(x, y):
     """6x6盤面の外側に向かって難易度を上げる"""
-    center = 2.5
-    distance = abs(x - center) + abs(y - center)
-    if distance <= 2:
+    
+    if (x == 0 or x == 5) and (y == 0 or y == 5):
+        return "hard"
+    if (x,y) in [(1,2),(1,3),(2,1),(2,4),(3,1),(3,4),(4,2),(4,3)]:
         return "easy"
-    if distance <= 4:
-        return "normal"
-    return "hard"
+    return "normal"
 
 
 def pick_question(category, difficulty, excluded_indices=None):

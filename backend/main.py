@@ -70,6 +70,8 @@ async def websocket_endpoint(websocket: WebSocket):
                     "category": category,
                     "turn": 1,
                     "pending": None,
+                    "wrong_count": 0,
+                    "attempted_positions": [],
                 }
                 active_rooms[room_id] = room
 
@@ -98,7 +100,34 @@ async def websocket_endpoint(websocket: WebSocket):
                     continue
                 if not (0 <= x < 6 and 0 <= y < 6):
                     continue
+
+                if not has_valid_moves(room["board"], color, room["attempted_positions"]):
+                    next_turn = 2 if color == 1 else 1
+                    game_over = False
+                    message = "置ける場所がないためパスします。"
+                    if not has_valid_moves(room["board"], next_turn):
+                        game_over = True
+                        message += " 盤面に置ける場所がありません。"
+                    room["turn"] = next_turn
+                    room["wrong_count"] = 0
+                    room["attempted_positions"] = []
+                    score = get_score(room["board"])
+                    update_msg = json.dumps({
+                        "type": "update",
+                        "board": room["board"],
+                        "turn": room["turn"],
+                        "score": score,
+                        "message": message,
+                        "game_over": game_over,
+                    })
+                    for p in room["players"]:
+                        await p.send_text(update_msg)
+                    continue
+
                 if room["board"][y][x] != 0:
+                    continue
+                if (x, y) in room["attempted_positions"]:
+                    await websocket.send_text(json.dumps({"type": "invalid_move", "message": "この場所はこのターン中にすでに選択しました。別の場所を選んでください。"}))
                     continue
 
                 flippable = get_flippable_disks(room["board"], x, y, color)
@@ -123,34 +152,69 @@ async def websocket_endpoint(websocket: WebSocket):
                 x, y = pending["x"], pending["y"]
                 cell = room["quiz_board"][y][x]
                 is_correct = selected_index == cell["correct"]
+                current_player = pending["player"]
+                opponent = 2 if current_player == 1 else 1
+                game_over = False
 
                 if is_correct:
-                    room["board"][y][x] = pending["player"]
+                    room["board"][y][x] = current_player
                     for fx, fy in pending["flippable"]:
-                        room["board"][fy][fx] = pending["player"]
+                        room["board"][fy][fx] = current_player
+                    room["wrong_count"] = 0
+                    room["attempted_positions"] = []
                     message = "正解！石を置きました。"
+                    next_turn = opponent
+
+                    if not has_valid_moves(room["board"], next_turn):
+                        if has_valid_moves(room["board"], current_player):
+                            message += " 相手は置けないため、あなたの番に戻ります。"
+                            next_turn = current_player
+                        else:
+                            game_over = True
+                            message += " 盤面に置ける場所がありません。"
                 else:
                     if selected_index not in cell["removedChoices"]:
                         cell["removedChoices"].append(selected_index)
-                    message = "不正解です。相手のターンになります。"
+                    room["wrong_count"] += 1
+                    room["attempted_positions"].append((x, y))
 
-                next_turn = 2 if pending["player"] == 1 else 1
-                game_over = False
-                if not has_valid_moves(room["board"], next_turn):
-                    if has_valid_moves(room["board"], pending["player"]):
-                        message += " 相手は置けないため、あなたの番に戻ります。"
-                        next_turn = pending["player"]
+                    remaining_moves = has_valid_moves(room["board"], current_player, room["attempted_positions"])
+                    if room["wrong_count"] >= 3 or not remaining_moves:
+                        message = "不正解です。"
+                        if room["wrong_count"] >= 3:
+                            message += " 3回間違えたためパスします。"
+                        else:
+                            message += " 置ける場所がなくなったためパスします。"
+                        next_turn = opponent
+
+                        if not has_valid_moves(room["board"], next_turn):
+                            if has_valid_moves(room["board"], current_player):
+                                message += " 相手は置けないため、あなたの番に戻ります。"
+                                next_turn = current_player
+                            else:
+                                game_over = True
+                                message += " 盤面に置ける場所がありません。"
+
+                        room["wrong_count"] = 0
+                        room["attempted_positions"] = []
                     else:
-                        game_over = True
-                        message += " 盤面に置ける場所がありません。"
-                if not any(0 in row for row in room["board"]):
-                    game_over = True
+                        next_turn = current_player
+                        message = f"不正解です。同じ場所は選べません。別の場所を選んでください。残りあと{3 - room['wrong_count']}回間違えられます。"
 
                 room["turn"] = next_turn
                 room["pending"] = None
                 score = get_score(room["board"])
 
-                if game_over:
+                if not any(0 in row for row in room["board"]) and not game_over:
+                    game_over = True
+                    if score["black"] > score["white"]:
+                        message += f" 黒の勝ち！ ({score['black']} 対 {score['white']})"
+                    elif score["white"] > score["black"]:
+                        message += f" 白の勝ち！ ({score['white']} 対 {score['black']})"
+                    else:
+                        message += f" 引き分け！ ({score['black']} 対 {score['white']})"
+
+                if game_over and "勝ち" not in message and "引き分け" not in message:
                     if score["black"] > score["white"]:
                         message += f" 黒の勝ち！ ({score['black']} 対 {score['white']})"
                     elif score["white"] > score["black"]:
