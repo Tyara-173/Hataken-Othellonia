@@ -1,10 +1,24 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 import json
 import uuid
 from othello_logic import get_flippable_disks, has_valid_moves, get_score, get_available_moves
 from quiz_data import create_quiz_board
 
 app = FastAPI()
+
+# CORSミドルウェアの設定
+origins = [
+    "http://localhost:8000",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # マッチング待ちのプレイヤーをカテゴリ別に保持
 # 値は { "ws": WebSocket, "username": str } か None
