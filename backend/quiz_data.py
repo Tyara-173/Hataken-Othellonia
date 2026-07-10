@@ -128,7 +128,6 @@ def create_quiz_board(category):
     random.shuffle(easy_questions)
     random.shuffle(normal_questions)
     random.shuffle(hard_questions)
-    print(normal_questions,len(normal_questions))
     easy_iter = iter(easy_questions)
     normal_iter = iter(normal_questions)
     hard_iter = iter(hard_questions)
@@ -145,8 +144,8 @@ def create_quiz_board(category):
             elif difficulty == "hard":
                 question = next(hard_iter, None)
             else:
+                row.append({})
                 continue  # 難易度が "none" の場合はスキップ
-            print(x,y,question)
             if question is None:
                 raise RuntimeError(f"不足しています: {category} の {difficulty} で一意なクイズが足りません。")
             used_question_ids.add(question.get("id"))
