@@ -47,6 +47,23 @@ def create_initial_board():
         [0, 0, 0, 0, 0, 0],
     ]
 
+
+def build_surrender_payload(room, surrendering_color):
+    winner_color = 2 if surrendering_color == 1 else 1
+    score = get_score(room["board"])
+    surrendering_label = "黒" if surrendering_color == 1 else "白"
+    winner_label = "白" if winner_color == 2 else "黒"
+    return {
+        "type": "update",
+        "board": room["board"],
+        "turn": winner_color,
+        "score": score,
+        "message": f"{surrendering_label}が降参しました。{winner_label}の勝ちです。",
+        "game_over": True,
+        "available_moves": [],
+    }
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
@@ -317,6 +334,23 @@ async def websocket_endpoint(websocket: WebSocket):
                     "game_over": game_over,
                     "available_moves": get_available_moves(room["board"], room["turn"]),
                 })
+                for p in room["players"]:
+                    await p.send_text(update_msg)
+
+            elif action == "surrender":
+                room_id = payload.get("room_id")
+                room = active_rooms.get(room_id)
+                if not room:
+                    continue
+
+                color = payload.get("color")
+                if color not in (1, 2):
+                    continue
+
+                room["pending"] = None
+                room["attempted_positions"] = []
+                room["wrong_count"] = 0
+                update_msg = json.dumps(build_surrender_payload(room, color))
                 for p in room["players"]:
                     await p.send_text(update_msg)
 

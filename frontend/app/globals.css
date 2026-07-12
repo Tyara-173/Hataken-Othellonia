@@ -194,6 +194,33 @@ main {
   min-height: 24px;
 }
 
+.surrender-btn {
+  margin-top: 16px;
+  border: 1px solid #f59e0b;
+  color: #9a2c00;
+  padding: 10px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-weight: 700;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.05s linear;
+}
+
+.surrender-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(245, 158, 11, 0.16);
+}
+
+.surrender-btn:active {
+  transform: scale(0.98);
+}
+
+.surrender-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
 .error-text {
   color: #dc2626;
   margin-top: 8px;
