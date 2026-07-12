@@ -72,7 +72,7 @@ export default function HomePage() {
   };
 
   const startMatch = () => {
-    const ws = new WebSocket('wss://othello-backend-qrhzeh4tlq-an.a.run.app/ws');
+    const ws = new WebSocket('wss://hataken-othellonia-beta-qrhzeh4tlq-an.a.run.app/ws');
 
     setScreen('waiting');
     setQuestion(null);
