@@ -38,6 +38,7 @@ export default function HomePage() {
   const [statusText, setStatusText] = useState('現在のターン: -');
   const [connectionError, setConnectionError] = useState('');
   const [surrenderProgress, setSurrenderProgress] = useState(0);
+  const [gameOver, setGameOver] = useState(false);
 
   const wsRef = useRef(null);
   const roomRef = useRef(null);
@@ -56,12 +57,7 @@ export default function HomePage() {
     };
   }, []);
 
-  const returnToTitleWithConfirm = (message) => {
-    const shouldReturn = window.confirm(`${message}\nOKを押すとタイトルに戻ります。`);
-    if (!shouldReturn) {
-      return;
-    }
-
+  const resetToTitle = (message = '') => {
     setScreen('title');
     setConnectionError(message);
     setMessage('');
@@ -76,6 +72,25 @@ export default function HomePage() {
     colorRef.current = null;
     setPlayerNames({ 1: '-', 2: '-' });
     setSurrenderProgress(0);
+    setGameOver(false);
+  };
+
+  const returnToTitleWithConfirm = (message) => {
+    const shouldReturn = window.confirm(`${message}\nOKを押すとタイトルに戻ります。`);
+    if (!shouldReturn) {
+      return;
+    }
+
+    resetToTitle(message);
+  };
+
+  const handleReturnToTitle = () => {
+    const ws = wsRef.current;
+    wsRef.current = null;
+    if (ws && ws.readyState === 1) {
+      ws.close();
+    }
+    resetToTitle('');
   };
 
   const startMatch = () => {
@@ -90,6 +105,7 @@ export default function HomePage() {
     setAvailableMoves([]);
     setStatusText('現在のターン: -');
     setSurrenderProgress(0);
+    setGameOver(false);
 
     ws.onopen = () => {
       ws.send(JSON.stringify({
@@ -126,6 +142,7 @@ export default function HomePage() {
         setAvailableMoves(data.available_moves || []);
         setQuestion(null);
         setStatusText(`現在のターン: ${getTurnLabel(data.turn || 1)}`);
+        setGameOver(Boolean(data.game_over));
         if (data.message) {
           setMessage(data.message);
         }
@@ -292,6 +309,11 @@ export default function HomePage() {
             </div>
             <div className="message-text">{message}</div>
             {connectionError ? <div className="error-text">{connectionError}</div> : null}
+            {gameOver ? (
+              <button className="match-btn" onClick={handleReturnToTitle} style={{ marginTop: 12 }}>
+                タイトルへ戻る
+              </button>
+            ) : null}
           </div>
 
           {question ? (
@@ -328,22 +350,24 @@ export default function HomePage() {
             )}
           </div>
 
-          <button
-            className="surrender-btn"
-            type="button"
-            onMouseDown={handleSurrenderPressStart}
-            onMouseUp={stopSurrenderHold}
-            onMouseLeave={stopSurrenderHold}
-            onTouchStart={handleSurrenderPressStart}
-            onTouchEnd={stopSurrenderHold}
-            onTouchCancel={stopSurrenderHold}
-            onClick={(event) => event.preventDefault()}
-            style={{
-              background: `linear-gradient(135deg, #fff7ed 0%, #f59e0b ${surrenderProgress}%, #fff7ed ${surrenderProgress}%, #fff7ed 100%)`,
-            }}
-          >
-            {surrenderProgress > 0 ? `長押し中... ${surrenderProgress}%` : '長押しで降参'}
-          </button>
+          {!gameOver ? (
+            <button
+              className="surrender-btn"
+              type="button"
+              onMouseDown={handleSurrenderPressStart}
+              onMouseUp={stopSurrenderHold}
+              onMouseLeave={stopSurrenderHold}
+              onTouchStart={handleSurrenderPressStart}
+              onTouchEnd={stopSurrenderHold}
+              onTouchCancel={stopSurrenderHold}
+              onClick={(event) => event.preventDefault()}
+              style={{
+                background: `linear-gradient(135deg, #fff7ed 0%, #f59e0b ${surrenderProgress}%, #fff7ed ${surrenderProgress}%, #fff7ed 100%)`,
+              }}
+            >
+              {surrenderProgress > 0 ? `長押し中... ${surrenderProgress}%` : '長押しで降参'}
+            </button>
+          ) : null}
         </section>
       )}
     </main>
