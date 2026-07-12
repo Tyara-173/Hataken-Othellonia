@@ -83,6 +83,10 @@ main {
   box-shadow: 0 8px 20px rgba(37, 99, 235, 0.25);
 }
 
+.match-btn:active {
+  transform: translateY(0);
+}
+
 .info-panel {
   margin-bottom: 20px;
   text-align: center;

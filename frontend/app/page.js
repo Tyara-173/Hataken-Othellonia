@@ -37,6 +37,7 @@ export default function HomePage() {
   const [question, setQuestion] = useState(null);
   const [statusText, setStatusText] = useState('現在のターン: -');
   const [connectionError, setConnectionError] = useState('');
+  const [gameOver, setGameOver] = useState(false);
 
   const wsRef = useRef(null);
   const roomRef = useRef(null);
@@ -50,12 +51,7 @@ export default function HomePage() {
     };
   }, []);
 
-  const returnToTitleWithConfirm = (message) => {
-    const shouldReturn = window.confirm(`${message}\nOKを押すとタイトルに戻ります。`);
-    if (!shouldReturn) {
-      return;
-    }
-
+  const resetToTitle = (message = '') => {
     setScreen('title');
     setConnectionError(message);
     setMessage('');
@@ -69,6 +65,25 @@ export default function HomePage() {
     setMyColor(null);
     colorRef.current = null;
     setPlayerNames({ 1: '-', 2: '-' });
+    setGameOver(false);
+  };
+
+  const returnToTitleWithConfirm = (message) => {
+    const shouldReturn = window.confirm(`${message}\nOKを押すとタイトルに戻ります。`);
+    if (!shouldReturn) {
+      return;
+    }
+
+    resetToTitle(message);
+  };
+
+  const handleReturnToTitle = () => {
+    const ws = wsRef.current;
+    wsRef.current = null;
+    if (ws && ws.readyState === 1) {
+      ws.close();
+    }
+    resetToTitle('');
   };
 
   const startMatch = () => {
@@ -82,6 +97,7 @@ export default function HomePage() {
     setCurrentTurn(1);
     setAvailableMoves([]);
     setStatusText('現在のターン: -');
+    setGameOver(false);
 
     ws.onopen = () => {
       ws.send(JSON.stringify({
@@ -108,6 +124,7 @@ export default function HomePage() {
         setQuestion(null);
         setScreen('game');
         setStatusText(`現在のターン: ${getTurnLabel(data.turn)}`);
+        setGameOver(false);
         setMessage('問題をクリックして回答してください。');
       } else if (data.type === 'question_prompt') {
         setQuestion(data);
@@ -118,6 +135,7 @@ export default function HomePage() {
         setAvailableMoves(data.available_moves || []);
         setQuestion(null);
         setStatusText(`現在のターン: ${getTurnLabel(data.turn || 1)}`);
+        setGameOver(Boolean(data.game_over));
         if (data.message) {
           setMessage(data.message);
         }
@@ -234,6 +252,11 @@ export default function HomePage() {
             </div>
             <div className="message-text">{message}</div>
             {connectionError ? <div className="error-text">{connectionError}</div> : null}
+            {gameOver ? (
+              <button className="match-btn" onClick={handleReturnToTitle} style={{ marginTop: 12 }}>
+                タイトルへ戻る
+              </button>
+            ) : null}
           </div>
 
           {question ? (
