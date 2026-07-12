@@ -1,6 +1,7 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 import json
+import random
 import uuid
 
 try:
@@ -52,19 +53,35 @@ async def websocket_endpoint(websocket: WebSocket):
 
     def build_question_prompt(room, x, y):
         cell = room["quiz_board"][y][x]
-        choices = [
-            {"index": idx, "label": text}
-            for idx, text in enumerate(cell["choices"])
-            if idx not in cell["removedChoices"]
-        ]
+        available_indices = [idx for idx in range(len(cell["choices"])) if idx not in cell["removedChoices"]]
+        if not available_indices:
+            available_indices = list(range(len(cell["choices"])))
+
+        shuffled_indices = available_indices[:]
+        random.shuffle(shuffled_indices)
+
+        display_choices = []
+        choice_map = {}
+        for display_index, original_index in enumerate(shuffled_indices):
+            choice_map[display_index] = original_index
+            display_choices.append({
+                "index": display_index,
+                "label": cell["choices"][original_index],
+            })
+
+        correct_display_index = next(
+            (display_index for display_index, original_index in choice_map.items() if original_index == cell["correct"]),
+            None,
+        )
+
         return {
             "type": "question_prompt",
             "x": x,
             "y": y,
             "question": cell["question"],
-            "choices": choices,
+            "choices": display_choices,
             "difficulty": cell["difficulty"],
-        }
+        }, choice_map, correct_display_index
 
     try:
         while True:
@@ -166,8 +183,16 @@ async def websocket_endpoint(websocket: WebSocket):
                     await websocket.send_text(json.dumps({"type": "invalid_move", "message": "その場所には石を置けません。"}))
                     continue
 
-                room["pending"] = {"player": color, "x": x, "y": y, "flippable": flippable}
-                await websocket.send_text(json.dumps(build_question_prompt(room, x, y)))
+                prompt_payload, choice_map, correct_display_index = build_question_prompt(room, x, y)
+                room["pending"] = {
+                    "player": color,
+                    "x": x,
+                    "y": y,
+                    "flippable": flippable,
+                    "choice_map": choice_map,
+                    "correct_display_index": correct_display_index,
+                }
+                await websocket.send_text(json.dumps(prompt_payload))
 
             elif action == "answer_question":
                 room_id = payload.get("room_id")
@@ -182,7 +207,18 @@ async def websocket_endpoint(websocket: WebSocket):
 
                 x, y = pending["x"], pending["y"]
                 cell = room["quiz_board"][y][x]
-                is_correct = selected_index == cell["correct"]
+                choice_map = pending.get("choice_map", {})
+                correct_display_index = pending.get("correct_display_index")
+
+                if isinstance(choice_map, dict) and selected_index in choice_map:
+                    selected_original_index = choice_map[selected_index]
+                else:
+                    selected_original_index = None
+
+                is_correct = selected_original_index is not None and selected_original_index == cell["correct"]
+                if selected_original_index is None and correct_display_index is not None:
+                    is_correct = selected_index == correct_display_index
+
                 current_player = pending["player"]
                 opponent = 2 if current_player == 1 else 1
                 game_over = False
@@ -204,8 +240,8 @@ async def websocket_endpoint(websocket: WebSocket):
                             game_over = True
                             message += " 盤面に置ける場所がありません。"
                 else:
-                    if selected_index not in cell["removedChoices"]:
-                        cell["removedChoices"].append(selected_index)
+                    if selected_original_index is not None and selected_original_index not in cell["removedChoices"]:
+                        cell["removedChoices"].append(selected_original_index)
                     room["wrong_count"] += 1
                     room["attempted_positions"].append((x, y))
 
