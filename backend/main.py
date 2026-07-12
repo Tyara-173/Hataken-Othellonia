@@ -51,9 +51,6 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
 
     def build_question_prompt(room, x, y):
-        print(x,y)
-        print(room["quiz_board"])
-        print(len(room["quiz_board"][y]))
         cell = room["quiz_board"][y][x]
         choices = [
             {"index": idx, "label": text}
