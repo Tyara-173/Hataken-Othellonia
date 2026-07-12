@@ -18,6 +18,7 @@ origins = [
     "http://127.0.0.1:8000",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "https://hataken-othellonia-beta-4jmaknrsf-tyara1031-5481s-projects.vercel.app/"
 ]
 
 app.add_middleware(

@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from 'react';
 
 const BOARD_SIZE = 6;
-const DEFAULT_WS_URL = 'ws://localhost:8000/ws';
 
 function createInitialBoard() {
   return [
@@ -52,8 +51,7 @@ export default function HomePage() {
   }, []);
 
   const startMatch = () => {
-    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || DEFAULT_WS_URL;
-    const ws = new WebSocket(wsUrl);
+    const ws = new WebSocket('wss://othello-backend-qrhzeh4tlq-an.a.run.app/ws');
 
     setScreen('waiting');
     setQuestion(null);
