@@ -50,6 +50,27 @@ export default function HomePage() {
     };
   }, []);
 
+  const returnToTitleWithConfirm = (message) => {
+    const shouldReturn = window.confirm(`${message}\nOKを押すとタイトルに戻ります。`);
+    if (!shouldReturn) {
+      return;
+    }
+
+    setScreen('title');
+    setConnectionError(message);
+    setMessage('');
+    setQuestion(null);
+    setBoard(createInitialBoard());
+    setCurrentTurn(1);
+    setAvailableMoves([]);
+    setStatusText('現在のターン: -');
+    setRoomId(null);
+    roomRef.current = null;
+    setMyColor(null);
+    colorRef.current = null;
+    setPlayerNames({ 1: '-', 2: '-' });
+  };
+
   const startMatch = () => {
     const ws = new WebSocket('wss://othello-backend-qrhzeh4tlq-an.a.run.app/ws');
 
@@ -102,16 +123,21 @@ export default function HomePage() {
         }
       } else if (data.type === 'invalid_move') {
         setMessage(data.message || 'その手は無効です。');
+      } else if (data.type === 'opponent_disconnected') {
+        returnToTitleWithConfirm(data.message || '通信が切断されました。対戦を終了します。');
       }
     };
 
     ws.onerror = () => {
-      setConnectionError('接続エラーが発生しました。バックエンドが起動しているか確認してください。');
-      setScreen('title');
+      returnToTitleWithConfirm('接続エラーが発生しました。バックエンドが起動しているか確認してください。');
     };
 
     ws.onclose = () => {
-      setMessage('接続が切れました。もう一度対戦を開始してください。');
+      if (wsRef.current !== ws) {
+        return;
+      }
+
+      returnToTitleWithConfirm('通信が切断されました。対戦を終了します。');
     };
 
     wsRef.current = ws;
@@ -161,6 +187,7 @@ export default function HomePage() {
                 placeholder="名前を入力してください"
               />
             </div>
+            {/* {connectionError ? <div className="error-text">{connectionError}</div> : null} */}
             <button className="match-btn" onClick={() => setScreen('category')}>
               オンライン対戦を探す
             </button>

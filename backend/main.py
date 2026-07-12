@@ -51,6 +51,25 @@ def create_initial_board():
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
 
+    async def notify_room_disconnect(room_id, disconnected_ws):
+        room = active_rooms.get(room_id)
+        if not room:
+            return
+
+        remaining_players = [player for player in room["players"] if player is not disconnected_ws]
+        if remaining_players:
+            del active_rooms[room_id]
+            for player in remaining_players:
+                try:
+                    await player.send_text(json.dumps({
+                        "type": "opponent_disconnected",
+                        "message": "相手プレイヤーが切断されたため、対戦を終了します。",
+                    }))
+                except Exception:
+                    pass
+        else:
+            active_rooms.pop(room_id, None)
+
     def build_question_prompt(room, x, y):
         cell = room["quiz_board"][y][x]
         available_indices = [idx for idx in range(len(cell["choices"])) if idx not in cell["removedChoices"]]
@@ -311,6 +330,11 @@ async def websocket_endpoint(websocket: WebSocket):
                 await websocket.send_text(json.dumps(build_question_prompt(room, x, y)))
 
     except WebSocketDisconnect:
+        for room_id, room in list(active_rooms.items()):
+            if websocket in room["players"]:
+                await notify_room_disconnect(room_id, websocket)
+                break
+
         for category, waiting in list(waiting_players.items()):
             if waiting and waiting.get("ws") == websocket:
                 waiting_players[category] = None
