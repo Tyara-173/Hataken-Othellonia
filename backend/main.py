@@ -6,10 +6,10 @@ import uuid
 
 try:
     from .othello_logic import get_flippable_disks, has_valid_moves, get_score, get_available_moves
-    from .quiz_data import create_quiz_board
+    from .quiz_data import create_quiz_board, get_available_categories
 except ImportError:  # pragma: no cover - supports running from backend directory
     from othello_logic import get_flippable_disks, has_valid_moves, get_score, get_available_moves
-    from quiz_data import create_quiz_board
+    from quiz_data import create_quiz_board, get_available_categories
 
 app = FastAPI()
 
@@ -29,6 +29,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.get("/categories")
+def list_categories():
+    return {"categories": get_available_categories()}
+
 
 # マッチング待ちのプレイヤーをカテゴリ別に保持
 # 値は { "ws": WebSocket, "username": str } か None

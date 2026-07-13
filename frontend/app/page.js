@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 
 const BOARD_SIZE = 6;
+const BACKEND_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://hataken-othellonia-beta-qrhzeh4tlq-an.a.run.app';
+const WS_BASE_URL = process.env.NEXT_PUBLIC_WS_URL || 'wss://hataken-othellonia-beta-qrhzeh4tlq-an.a.run.app';
 
 function createInitialBoard() {
   return [
@@ -26,7 +28,8 @@ function getColorLabel(color) {
 export default function HomePage() {
   const [screen, setScreen] = useState('title');
   const [username, setUsername] = useState('');
-  const [category, setCategory] = useState('漢字');
+  const [category, setCategory] = useState('');
+  const [availableCategories, setAvailableCategories] = useState([]);
   const [message, setMessage] = useState('');
   const [playerNames, setPlayerNames] = useState({ 1: '-', 2: '-' });
   const [myColor, setMyColor] = useState(null);
@@ -47,6 +50,23 @@ export default function HomePage() {
   const surrenderStartRef = useRef(null);
 
   useEffect(() => {
+    fetch(`${BACKEND_BASE_URL}/categories`)
+      .then((response) => response.ok ? response.json() : { categories: [] })
+      .then((data) => {
+        const categories = data?.categories || [];
+        setAvailableCategories(categories);
+        setCategory((currentCategory) => {
+          if (categories.includes(currentCategory)) {
+            return currentCategory;
+          }
+          return categories[0] || '';
+        });
+      })
+      .catch(() => {
+        setAvailableCategories([]);
+        setCategory('');
+      });
+
     return () => {
       if (surrenderTimerRef.current) {
         window.clearTimeout(surrenderTimerRef.current);
@@ -94,7 +114,7 @@ export default function HomePage() {
   };
 
   const startMatch = () => {
-    const ws = new WebSocket('wss://hataken-othellonia-beta-qrhzeh4tlq-an.a.run.app/ws');
+    const ws = new WebSocket(`${WS_BASE_URL}/ws`);
 
     setScreen('waiting');
     setQuestion(null);
@@ -277,8 +297,13 @@ export default function HomePage() {
             <div className="input-group">
               <label htmlFor="category">ジャンル</label>
               <select id="category" value={category} onChange={(event) => setCategory(event.target.value)}>
-                <option value="漢字">漢字</option>
-                <option value="地理">地理</option>
+                {availableCategories.length === 0 ? (
+                  <option value="">読み込み中...</option>
+                ) : (
+                  availableCategories.map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))
+                )}
               </select>
             </div>
             <button className="match-btn" onClick={startMatch}>

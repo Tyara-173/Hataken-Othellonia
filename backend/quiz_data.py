@@ -5,14 +5,15 @@ import random
 
 logger = logging.getLogger(__name__)
 QUIZ_ROOT = os.path.join(os.path.dirname(__file__), "quiz")
-CATEGORY_DIR_MAP = {
-    "漢字": "Kanji",
-    "地理": "Geo",
-}
 DIFFICULTY_FOLDERS = {
     "easy": "Easy",
     "normal": "Normal",
     "hard": "Hard",
+}
+MIN_QUESTION_COUNTS = {
+    "easy": 8,
+    "normal": 20,
+    "hard": 4,
 }
 
 
@@ -80,14 +81,19 @@ def _load_questions_from_file(file_path):
     }
 
 
-def load_quiz_bank():
+def load_quiz_bank(quiz_root=None):
+    quiz_root = quiz_root or QUIZ_ROOT
     bank = {}
-    for category_name, folder_name in CATEGORY_DIR_MAP.items():
-        category_path = os.path.join(QUIZ_ROOT, folder_name)
+    if not os.path.isdir(quiz_root):
+        return bank
+
+    for category_name in sorted(os.listdir(quiz_root)):
+        category_path = os.path.join(quiz_root, category_name)
         if not os.path.isdir(category_path):
             continue
 
-        bank[category_name] = {}
+        questions_by_difficulty = {}
+        meets_thresholds = True
         for diff_key, diff_dir in DIFFICULTY_FOLDERS.items():
             diff_path = os.path.join(category_path, diff_dir)
             questions = []
@@ -99,13 +105,26 @@ def load_quiz_bank():
                     loaded = _load_questions_from_file(file_path)
                     if loaded is not None:
                         questions.append(loaded)
-            bank[category_name][diff_key] = questions
+            questions_by_difficulty[diff_key] = questions
+            if len(questions) < MIN_QUESTION_COUNTS[diff_key]:
+                meets_thresholds = False
+
+        if meets_thresholds:
+            bank[category_name] = questions_by_difficulty
     return bank
+
+
+def get_available_categories(quiz_root=None):
+    return list(load_quiz_bank(quiz_root).keys())
 
 
 QUIZ_BANK = load_quiz_bank()
 DEFAULT_CATEGORY = next(iter(QUIZ_BANK), None)
 DIFFICULTIES = ["easy", "normal", "hard"]
+
+
+def get_quiz_bank(quiz_root=None):
+    return load_quiz_bank(quiz_root or QUIZ_ROOT)
 
 
 def difficulty_for_cell(x, y):
@@ -121,9 +140,10 @@ def difficulty_for_cell(x, y):
 
 def create_quiz_board(category):
     """6x6のクイズボードを生成する"""
-    easy_questions = QUIZ_BANK.get(category, {}).get("easy", [])
-    normal_questions = QUIZ_BANK.get(category, {}).get("normal", [])
-    hard_questions = QUIZ_BANK.get(category, {}).get("hard", [])
+    quiz_bank = get_quiz_bank()
+    easy_questions = list(quiz_bank.get(category, {}).get("easy", []))
+    normal_questions = list(quiz_bank.get(category, {}).get("normal", []))
+    hard_questions = list(quiz_bank.get(category, {}).get("hard", []))
 
     random.shuffle(easy_questions)
     random.shuffle(normal_questions)
