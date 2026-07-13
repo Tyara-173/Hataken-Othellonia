@@ -42,10 +42,12 @@ export default function HomePage() {
   const [connectionError, setConnectionError] = useState('');
   const [surrenderProgress, setSurrenderProgress] = useState(0);
   const [gameOver, setGameOver] = useState(false);
+  const [availableBgm, setAvailableBgm] = useState({ title: false, game: false, end: false });
 
   const wsRef = useRef(null);
   const roomRef = useRef(null);
   const colorRef = useRef(null);
+  const audioRef = useRef(null);
   const surrenderTimerRef = useRef(null);
   const surrenderStartRef = useRef(null);
 
@@ -67,6 +69,26 @@ export default function HomePage() {
         setCategory('');
       });
 
+    const checkTrack = async (name) => {
+      try {
+        const response = await fetch(`/bgm/${name}.mp3`, { method: 'HEAD' });
+        return response.ok;
+      } catch {
+        return false;
+      }
+    };
+
+    const loadAvailableBgm = async () => {
+      const [title, game, end] = await Promise.all([
+        checkTrack('title'),
+        checkTrack('game'),
+        checkTrack('end'),
+      ]);
+      setAvailableBgm({ title, game, end });
+    };
+
+    loadAvailableBgm();
+
     return () => {
       if (surrenderTimerRef.current) {
         window.clearTimeout(surrenderTimerRef.current);
@@ -74,8 +96,36 @@ export default function HomePage() {
       if (wsRef.current && wsRef.current.readyState === 1) {
         wsRef.current.close();
       }
+      audioRef.current?.pause();
     };
   }, []);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) {
+      return;
+    }
+
+    const activeTrack = screen === 'title'
+      ? (availableBgm.title ? 'title' : null)
+      : gameOver
+        ? (availableBgm.end ? 'end' : null)
+        : screen === 'game'
+          ? (availableBgm.game ? 'game' : null)
+          : null;
+
+    if (!activeTrack) {
+      audio.pause();
+      audio.currentTime = 0;
+      return;
+    }
+
+    audio.loop = true;
+    audio.volume = 0.35;
+    audio.src = `/bgm/${activeTrack}.mp3`;
+    audio.load();
+    audio.play().catch(() => {});
+  }, [availableBgm, gameOver, screen]);
 
   const resetToTitle = (message = '') => {
     setScreen('title');
@@ -269,6 +319,7 @@ export default function HomePage() {
 
   return (
     <main>
+      <audio ref={audioRef} preload="auto" />
       {screen === 'title' && (
         <section className="screen">
           <div className="title-box">
