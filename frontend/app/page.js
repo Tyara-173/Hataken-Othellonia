@@ -43,11 +43,13 @@ export default function HomePage() {
   const [surrenderProgress, setSurrenderProgress] = useState(0);
   const [gameOver, setGameOver] = useState(false);
   const [availableBgm, setAvailableBgm] = useState({ title: false, game: false, end: false });
+  const [availableSe, setAvailableSe] = useState({ click: false, no_stone: false, quiz: false, correct: false, incorrect: false });
 
   const wsRef = useRef(null);
   const roomRef = useRef(null);
   const colorRef = useRef(null);
   const audioRef = useRef(null);
+  const seAudioRef = useRef(null);
   const surrenderTimerRef = useRef(null);
   const surrenderStartRef = useRef(null);
 
@@ -87,7 +89,28 @@ export default function HomePage() {
       setAvailableBgm({ title, game, end });
     };
 
+    const checkSeTrack = async (name) => {
+      try {
+        const response = await fetch(`/se/${name}.mp3`, { method: 'HEAD' });
+        return response.ok;
+      } catch {
+        return false;
+      }
+    };
+
+    const loadAvailableSe = async () => {
+      const [click, no_stone, quiz, correct, incorrect] = await Promise.all([
+        checkSeTrack('click'),
+        checkSeTrack('no_stone'),
+        checkSeTrack('quiz'),
+        checkSeTrack('correct'),
+        checkSeTrack('incorrect'),
+      ]);
+      setAvailableSe({ click, no_stone, quiz, correct, incorrect });
+    };
+
     loadAvailableBgm();
+    loadAvailableSe();
 
     return () => {
       if (surrenderTimerRef.current) {
@@ -126,6 +149,19 @@ export default function HomePage() {
     audio.load();
     audio.play().catch(() => {});
   }, [availableBgm, gameOver, screen]);
+
+  const playSe = (type) => {
+    const audio = seAudioRef.current;
+    if (!audio || !availableSe[type]) {
+      return;
+    }
+
+    audio.currentTime = 0;
+    audio.volume = 0.5;
+    audio.src = `/se/${type}.mp3`;
+    audio.load();
+    audio.play().catch(() => {});
+  };
 
   const resetToTitle = (message = '') => {
     setScreen('title');
@@ -206,6 +242,7 @@ export default function HomePage() {
       } else if (data.type === 'question_prompt') {
         setQuestion(data);
         setMessage('');
+        playSe('quiz');
       } else if (data.type === 'update') {
         setBoard(data.board || createInitialBoard());
         setCurrentTurn(data.turn || 1);
@@ -218,6 +255,8 @@ export default function HomePage() {
         }
       } else if (data.type === 'invalid_move') {
         setMessage(data.message || 'その手は無効です。');
+      } else if (data.type === 'answer_result') {
+        playSe(data.correct ? 'correct' : 'incorrect');
       } else if (data.type === 'opponent_disconnected') {
         returnToTitleWithConfirm(data.message || '通信が切断されました。対戦を終了します。');
       }
@@ -240,6 +279,13 @@ export default function HomePage() {
 
   const handleCellClick = (x, y) => {
     if (!wsRef.current || currentTurn !== myColor || !roomRef.current || !colorRef.current) {
+      playSe('click');
+      return;
+    }
+
+    const isValidPlacement = availableMoves.some((move) => move.x === x && move.y === y);
+    if (!isValidPlacement) {
+      playSe('no_stone');
       return;
     }
 
@@ -257,6 +303,7 @@ export default function HomePage() {
       return;
     }
 
+    playSe('quiz');
     wsRef.current.send(JSON.stringify({
       action: 'answer_question',
       room_id: roomRef.current,
@@ -320,6 +367,7 @@ export default function HomePage() {
   return (
     <main>
       <audio ref={audioRef} preload="auto" />
+      <audio ref={seAudioRef} preload="auto" />
       {screen === 'title' && (
         <section className="screen">
           <div className="title-box">
@@ -334,7 +382,10 @@ export default function HomePage() {
               />
             </div>
             {/* {connectionError ? <div className="error-text">{connectionError}</div> : null} */}
-            <button className="match-btn" onClick={() => setScreen('category')}>
+            <button className="match-btn" onClick={() => {
+              playSe('click');
+              setScreen('category');
+            }}>
               オンライン対戦を探す
             </button>
           </div>
@@ -357,7 +408,10 @@ export default function HomePage() {
                 )}
               </select>
             </div>
-            <button className="match-btn" onClick={startMatch}>
+            <button className="match-btn" onClick={() => {
+              playSe('click');
+              startMatch();
+            }}>
               対戦を開始
             </button>
           </div>
@@ -386,7 +440,10 @@ export default function HomePage() {
             <div className="message-text">{message}</div>
             {connectionError ? <div className="error-text">{connectionError}</div> : null}
             {gameOver ? (
-              <button className="match-btn" onClick={handleReturnToTitle} style={{ marginTop: 12 }}>
+              <button className="match-btn" onClick={() => {
+                playSe('click');
+                handleReturnToTitle();
+              }} style={{ marginTop: 12 }}>
                 タイトルへ戻る
               </button>
             ) : null}
