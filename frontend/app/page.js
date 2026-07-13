@@ -155,7 +155,7 @@ export default function HomePage() {
     if (!audio || !availableSe[type]) {
       return;
     }
-
+    console.log(`Playing SE: ${type}`);
     audio.currentTime = 0;
     audio.volume = 0.5;
     audio.src = `/se/${type}.mp3`;
@@ -283,8 +283,11 @@ export default function HomePage() {
       return;
     }
 
+    const cellValue = board[y]?.[x];
     const isValidPlacement = availableMoves.some((move) => move.x === x && move.y === y);
-    if (!isValidPlacement) {
+    const isOccupied = cellValue === 1 || cellValue === 2;
+
+    if (!isValidPlacement || isOccupied) {
       playSe('no_stone');
       return;
     }
