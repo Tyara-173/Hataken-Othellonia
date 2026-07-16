@@ -175,7 +175,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         "category": category,
                         # "quiz_board": quiz_board,
                         "player_names": {"1": room["usernames"][0], "2": room["usernames"][1]},
-                        "player_id" : player_id[idx],
+                        "player_id" : player_id[idx-1],
                         "available_moves": get_available_moves(room["board"], room["turn"]),
                     }))
 
