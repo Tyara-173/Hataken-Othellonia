@@ -147,12 +147,14 @@ async def websocket_endpoint(websocket: WebSocket):
                 player2 = websocket
                 player1_name = waiting_players[category]["username"]
                 player2_name = username
+                player_id = [str(uuid.uuid4()),str(uuid.uuid4())]
                 waiting_players[category] = None
 
                 quiz_board = create_quiz_board(category)
                 room = {
                     "players": [player1, player2],
                     "usernames": [player1_name, player2_name],
+                    "player_ids": player_id,
                     "board": create_initial_board(),
                     "quiz_board": quiz_board,
                     "category": category,
@@ -171,8 +173,9 @@ async def websocket_endpoint(websocket: WebSocket):
                         "board": room["board"],
                         "turn": 1,
                         "category": category,
-                        "quiz_board": quiz_board,
+                        # "quiz_board": quiz_board,
                         "player_names": {"1": room["usernames"][0], "2": room["usernames"][1]},
+                        "player_id" : player_id[idx],
                         "available_moves": get_available_moves(room["board"], room["turn"]),
                     }))
 
@@ -185,8 +188,9 @@ async def websocket_endpoint(websocket: WebSocket):
                     continue
 
                 color = payload.get("color")
+                pid = payload.get("player_id")
                 x, y = payload.get("x"), payload.get("y")
-                if room["turn"] != color:
+                if room["turn"] != color and room["player_ids"][color-1] != pid:
                     continue
                 if not (0 <= x < 6 and 0 <= y < 6):
                     continue
@@ -240,12 +244,14 @@ async def websocket_endpoint(websocket: WebSocket):
             elif action == "answer_question":
                 room_id = payload.get("room_id")
                 room = active_rooms.get(room_id)
+                
                 if not room or room["pending"] is None:
                     continue
 
                 selected_index = payload.get("selected_index")
                 pending = room["pending"]
-                if pending["player"] != payload.get("color"):
+                pid = payload.get("player_id")
+                if pending["player"] != payload.get("color") or room["player_ids"][pending["player"] - 1] != pid:
                     continue
 
                 x, y = pending["x"], pending["y"]
@@ -351,6 +357,9 @@ async def websocket_endpoint(websocket: WebSocket):
                     continue
 
                 color = payload.get("color")
+                pid = payload.get("player_id")
+                if room["player_ids"][color-1] != pid:
+                    continue
                 if color not in (1, 2):
                     continue
 

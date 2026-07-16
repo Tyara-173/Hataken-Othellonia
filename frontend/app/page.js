@@ -34,6 +34,7 @@ export default function HomePage() {
   const [playerNames, setPlayerNames] = useState({ 1: '-', 2: '-' });
   const [myColor, setMyColor] = useState(null);
   const [roomId, setRoomId] = useState(null);
+  const [playerId, setPlayerId] = useState(null);
   const [board, setBoard] = useState(createInitialBoard());
   const [currentTurn, setCurrentTurn] = useState(1);
   const [availableMoves, setAvailableMoves] = useState([]);
@@ -47,6 +48,7 @@ export default function HomePage() {
 
   const wsRef = useRef(null);
   const roomRef = useRef(null);
+  const playerRef = useRef(null);
   const colorRef = useRef(null);
   const audioRef = useRef(null);
   const seAudioRef = useRef(null);
@@ -173,7 +175,9 @@ export default function HomePage() {
     setAvailableMoves([]);
     setStatusText('現在のターン: -');
     setRoomId(null);
+    setPlayerId(null);
     roomRef.current = null;
+    playerRef.current = null;
     setMyColor(null);
     colorRef.current = null;
     setPlayerNames({ 1: '-', 2: '-' });
@@ -228,7 +232,9 @@ export default function HomePage() {
         setMessage(`ジャンル「${data.category}」の対戦相手を待っています...`);
       } else if (data.type === 'start') {
         setRoomId(data.room_id);
+        setPlayerId(data.player_id);
         roomRef.current = data.room_id;
+        playerRef.current = data.player_id;
         setMyColor(data.color);
         colorRef.current = data.color;
         setPlayerNames(data.player_names || { 1: '-', 2: '-' });
@@ -295,6 +301,7 @@ export default function HomePage() {
     wsRef.current.send(JSON.stringify({
       action: 'click_cell',
       room_id: roomRef.current,
+      player_id: playerRef.current,
       color: colorRef.current,
       x,
       y,
@@ -302,7 +309,7 @@ export default function HomePage() {
   };
 
   const handleAnswer = (choice) => {
-    if (!wsRef.current || !roomRef.current || !colorRef.current) {
+    if (!wsRef.current || !roomRef.current || !colorRef.current || !playerRef.current) {
       return;
     }
 
@@ -310,6 +317,7 @@ export default function HomePage() {
     wsRef.current.send(JSON.stringify({
       action: 'answer_question',
       room_id: roomRef.current,
+      player_id: playerRef.current,
       color: colorRef.current,
       selected_index: choice.index,
     }));
@@ -325,7 +333,7 @@ export default function HomePage() {
   };
 
   const handleSurrender = () => {
-    if (!wsRef.current || !roomRef.current || !colorRef.current) {
+    if (!wsRef.current || !roomRef.current || !colorRef.current || !playerRef.current) {
       stopSurrenderHold();
       return;
     }
@@ -334,12 +342,13 @@ export default function HomePage() {
     wsRef.current.send(JSON.stringify({
       action: 'surrender',
       room_id: roomRef.current,
+      player_id: playerRef.current,
       color: colorRef.current,
     }));
   };
 
   const handleSurrenderPressStart = () => {
-    if (!wsRef.current || !roomRef.current || !colorRef.current) {
+    if (!wsRef.current || !roomRef.current || !colorRef.current || !playerRef.current) {
       return;
     }
 
