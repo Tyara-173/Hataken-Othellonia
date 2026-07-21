@@ -1,20 +1,14 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 
 const BOARD_SIZE = 6;
 const BACKEND_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://hataken-othellonia-beta-qrhzeh4tlq-an.a.run.app';
 const WS_BASE_URL = process.env.NEXT_PUBLIC_WS_URL || 'wss://hataken-othellonia-beta-qrhzeh4tlq-an.a.run.app';
 
 function createInitialBoard() {
-  return [
-    [0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0],
-    [0, 0, 1, 2, 0, 0],
-    [0, 0, 2, 1, 0, 0],
-    [0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0],
-  ];
+  return Array(BOARD_SIZE).fill(0).map(() => Array(BOARD_SIZE).fill(0));
 }
 
 function getTurnLabel(turn) {
@@ -43,343 +37,225 @@ export default function HomePage() {
   const [connectionError, setConnectionError] = useState('');
   const [surrenderProgress, setSurrenderProgress] = useState(0);
   const [gameOver, setGameOver] = useState(false);
-  const [availableBgm, setAvailableBgm] = useState({ title: false, game: false, end: false });
-  const [availableSe, setAvailableSe] = useState({ click: false, no_stone: false, quiz: false, correct: false, incorrect: false });
+  const [isRoomCreator, setIsRoomCreator] = useState(false);
 
   const wsRef = useRef(null);
-  const roomRef = useRef(null);
-  const playerRef = useRef(null);
-  const colorRef = useRef(null);
-  const audioRef = useRef(null);
-  const seAudioRef = useRef(null);
   const surrenderTimerRef = useRef(null);
-  const surrenderStartRef = useRef(null);
 
+  // プレイヤーIDをlocalStorageで管理
   useEffect(() => {
-    fetch(`${BACKEND_BASE_URL}/categories`)
-      .then((response) => response.ok ? response.json() : { categories: [] })
-      .then((data) => {
-        const categories = data?.categories || [];
-        setAvailableCategories(categories);
-        setCategory((currentCategory) => {
-          if (categories.includes(currentCategory)) {
-            return currentCategory;
-          }
-          return categories[0] || '';
-        });
-      })
-      .catch(() => {
-        setAvailableCategories([]);
-        setCategory('');
-      });
+    let storedPlayerId = localStorage.getItem('playerId');
+    if (!storedPlayerId) {
+      storedPlayerId = uuidv4();
+      localStorage.setItem('playerId', storedPlayerId);
+    }
+    setPlayerId(storedPlayerId);
 
-    const checkTrack = async (name) => {
-      try {
-        const response = await fetch(`/bgm/${name}.mp3`, { method: 'HEAD' });
-        return response.ok;
-      } catch {
-        return false;
-      }
-    };
-
-    const loadAvailableBgm = async () => {
-      const [title, game, end] = await Promise.all([
-        checkTrack('title'),
-        checkTrack('game'),
-        checkTrack('end'),
-      ]);
-      setAvailableBgm({ title, game, end });
-    };
-
-    const checkSeTrack = async (name) => {
-      try {
-        const response = await fetch(`/se/${name}.mp3`, { method: 'HEAD' });
-        return response.ok;
-      } catch {
-        return false;
-      }
-    };
-
-    const loadAvailableSe = async () => {
-      const [click, no_stone, quiz, correct, incorrect] = await Promise.all([
-        checkSeTrack('click'),
-        checkSeTrack('no_stone'),
-        checkSeTrack('quiz'),
-        checkSeTrack('correct'),
-        checkSeTrack('incorrect'),
-      ]);
-      setAvailableSe({ click, no_stone, quiz, correct, incorrect });
-    };
-
-    loadAvailableBgm();
-    loadAvailableSe();
-
-    return () => {
-      if (surrenderTimerRef.current) {
-        window.clearTimeout(surrenderTimerRef.current);
-      }
-      if (wsRef.current && wsRef.current.readyState === 1) {
-        wsRef.current.close();
-      }
-      audioRef.current?.pause();
-    };
+    const storedUsername = localStorage.getItem('username') || '';
+    setUsername(storedUsername);
   }, []);
 
+  // URLからroomIdを取得し、対戦に参加
   useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) {
-      return;
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlRoomId = urlParams.get('roomId');
+    if (urlRoomId) {
+      setRoomId(urlRoomId);
+      setScreen('category'); // ジャンル選択画面へ
     }
+  }, []);
 
-    const activeTrack = screen === 'title'
-      ? (availableBgm.title ? 'title' : null)
-      : gameOver
-        ? (availableBgm.end ? 'end' : null)
-        : screen === 'game'
-          ? (availableBgm.game ? 'game' : null)
-          : null;
+  // カテゴリリストを取得
+  useEffect(() => {
+    fetch(`${BACKEND_BASE_URL}/categories`)
+      .then((res) => res.ok ? res.json() : { categories: [] })
+      .then((data) => {
+        const cats = data?.categories || [];
+        setAvailableCategories(cats);
+        if (cats.length > 0) {
+          setCategory(cats[0]);
+        }
+      })
+      .catch(() => setConnectionError("カテゴリの読み込みに失敗しました。"));
+  }, []);
 
-    if (!activeTrack) {
-      audio.pause();
-      audio.currentTime = 0;
-      return;
-    }
-
-    audio.loop = true;
-    audio.volume = 0.35;
-    audio.src = `/bgm/${activeTrack}.mp3`;
-    audio.load();
-    audio.play().catch(() => {});
-  }, [availableBgm, gameOver, screen]);
-
-  const playSe = (type) => {
-    const audio = seAudioRef.current;
-    if (!audio || !availableSe[type]) {
-      return;
-    }
-    console.log(`Playing SE: ${type}`);
-    audio.currentTime = 0;
-    audio.volume = 0.5;
-    audio.src = `/se/${type}.mp3`;
-    audio.load();
-    audio.play().catch(() => {});
+  const handleUsernameChange = (e) => {
+    const newUsername = e.target.value;
+    setUsername(newUsername);
+    localStorage.setItem('username', newUsername);
   };
 
-  const resetToTitle = (message = '') => {
-    setScreen('title');
-    setConnectionError(message);
-    setMessage('');
-    setQuestion(null);
+  const createRoom = () => {
+    const newRoomId = uuidv4();
+    setIsRoomCreator(true);
+    setRoomId(newRoomId);
+    // URLを更新してリロードせずにroomIdを反映
+    window.history.pushState({}, '', `?roomId=${newRoomId}`);
+    setScreen('category');
+  };
+
+  const copyInviteLink = () => {
+    const url = window.location.href;
+    navigator.clipboard.writeText(url)
+      .then(() => setMessage("招待リンクをコピーしました！"))
+      .catch(() => setMessage("コピーに失敗しました。"));
+  };
+
+  const resetGame = () => {
     setBoard(createInitialBoard());
     setCurrentTurn(1);
     setAvailableMoves([]);
+    setQuestion(null);
+    setGameOver(false);
+    setMessage('');
     setStatusText('現在のターン: -');
-    setRoomId(null);
-    setPlayerId(null);
-    roomRef.current = null;
-    playerRef.current = null;
     setMyColor(null);
-    colorRef.current = null;
     setPlayerNames({ 1: '-', 2: '-' });
-    setSurrenderProgress(0);
-    setGameOver(false);
   };
 
-  const returnToTitleWithConfirm = (message) => {
-    const shouldReturn = window.confirm(`${message}\nOKを押すとタイトルに戻ります。`);
-    if (!shouldReturn) {
-      return;
-    }
+  const connectToRoom = () => {
+    if (!roomId || !playerId) return;
 
-    resetToTitle(message);
-  };
-
-  const handleReturnToTitle = () => {
-    const ws = wsRef.current;
-    wsRef.current = null;
-    if (ws && ws.readyState === 1) {
-      ws.close();
-    }
-    resetToTitle('');
-  };
-
-  const startMatch = () => {
-    const ws = new WebSocket(`${WS_BASE_URL}/ws`);
-
+    resetGame();
     setScreen('waiting');
-    setQuestion(null);
-    setMessage('');
-    setConnectionError('');
-    setBoard(createInitialBoard());
-    setCurrentTurn(1);
-    setAvailableMoves([]);
-    setStatusText('現在のターン: -');
-    setSurrenderProgress(0);
-    setGameOver(false);
+    setMessage('接続中...');
+
+    const ws = new WebSocket(`${WS_BASE_URL}/ws/${roomId}`);
+    wsRef.current = ws;
 
     ws.onopen = () => {
       ws.send(JSON.stringify({
-        action: 'join_queue',
-        category,
+        action: 'join_room',
+        player_id: playerId,
         username: username.trim() || '名無し',
+        category: category, // ホストが選択したカテゴリ
       }));
     };
 
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
-
-      if (data.type === 'waiting') {
-        setMessage(`ジャンル「${data.category}」の対戦相手を待っています...`);
-      } else if (data.type === 'start') {
-        setRoomId(data.room_id);
-        setPlayerId(data.player_id);
-        roomRef.current = data.room_id;
-        playerRef.current = data.player_id;
-        setMyColor(data.color);
-        colorRef.current = data.color;
-        setPlayerNames(data.player_names || { 1: '-', 2: '-' });
-        setBoard(data.board || createInitialBoard());
-        setCurrentTurn(data.turn || 1);
-        setAvailableMoves(data.available_moves || []);
-        setQuestion(null);
-        setScreen('game');
-        setStatusText(`現在のターン: ${getTurnLabel(data.turn)}`);
-        setMessage('問題をクリックして回答してください。');
-      } else if (data.type === 'question_prompt') {
-        setQuestion(data);
-        setMessage('');
-        playSe('quiz');
-      } else if (data.type === 'update') {
-        setBoard(data.board || createInitialBoard());
-        setCurrentTurn(data.turn || 1);
-        setAvailableMoves(data.available_moves || []);
-        setQuestion(null);
-        setStatusText(`現在のターン: ${getTurnLabel(data.turn || 1)}`);
-        setGameOver(Boolean(data.game_over));
-        if (data.message) {
+      switch (data.type) {
+        case 'waiting':
+          setScreen('waiting');
           setMessage(data.message);
-        }
-      } else if (data.type === 'invalid_move') {
-        setMessage(data.message || 'その手は無効です。');
-      } else if (data.type === 'answer_result') {
-        playSe(data.correct ? 'correct' : 'incorrect');
-      } else if (data.type === 'opponent_disconnected') {
-        returnToTitleWithConfirm(data.message || '通信が切断されました。対戦を終了します。');
+          break;
+        case 'start':
+          setScreen('game');
+          setMyColor(data.color);
+          setBoard(data.board);
+          setCurrentTurn(data.turn);
+          setAvailableMoves(data.available_moves);
+          setPlayerNames(data.player_names);
+          setStatusText(`現在のターン: ${getTurnLabel(data.turn)}`);
+          setMessage('ゲーム開始！');
+          break;
+        case 'update':
+          setBoard(data.board);
+          setCurrentTurn(data.turn);
+          setAvailableMoves(data.available_moves);
+          setQuestion(null);
+          setStatusText(`現在のターン: ${getTurnLabel(data.turn)}`);
+          if (data.message) setMessage(data.message);
+          if (data.game_over) {
+            setGameOver(true);
+          }
+          break;
+        case 'question_prompt':
+          setQuestion(data);
+          setMessage('');
+          break;
+        case 'invalid_move':
+        case 'error':
+          setMessage(data.message);
+          break;
+        case 'opponent_disconnected':
+          setGameOver(true);
+          setMessage(data.message);
+          if (wsRef.current) {
+            wsRef.current.close();
+            wsRef.current = null;
+          }
+          break;
       }
     };
 
     ws.onerror = () => {
-      returnToTitleWithConfirm('接続エラーが発生しました。バックエンドが起動しているか確認してください。');
+      setConnectionError('WebSocket接続エラーが発生しました。');
+      setScreen('title');
     };
 
     ws.onclose = () => {
-      if (wsRef.current !== ws) {
-        return;
+      // 意図しない切断の場合のみメッセージを表示
+      if (!gameOver) {
+        setMessage('接続が切れました。');
       }
-
-      returnToTitleWithConfirm('通信が切断されました。対戦を終了します。');
     };
-
-    wsRef.current = ws;
   };
 
   const handleCellClick = (x, y) => {
-    if (!wsRef.current || currentTurn !== myColor || !roomRef.current || !colorRef.current) {
-      playSe('click');
-      return;
-    }
+    if (!wsRef.current || currentTurn !== myColor || gameOver) return;
 
-    const cellValue = board[y]?.[x];
-    const isValidPlacement = availableMoves.some((move) => move.x === x && move.y === y);
-    const isOccupied = cellValue === 1 || cellValue === 2;
-
-    if (!isValidPlacement || isOccupied) {
-      playSe('no_stone');
+    const isValidMove = availableMoves.some(move => move.x === x && move.y === y);
+    if (!isValidMove) {
+      setMessage("そこには置けません。");
       return;
     }
 
     wsRef.current.send(JSON.stringify({
       action: 'click_cell',
-      room_id: roomRef.current,
-      player_id: playerRef.current,
-      color: colorRef.current,
+      player_id: playerId,
+      color: myColor,
       x,
       y,
     }));
   };
 
   const handleAnswer = (choice) => {
-    if (!wsRef.current || !roomRef.current || !colorRef.current || !playerRef.current) {
-      return;
-    }
-
-    playSe('quiz');
+    if (!wsRef.current || !question) return;
     wsRef.current.send(JSON.stringify({
       action: 'answer_question',
-      room_id: roomRef.current,
-      player_id: playerRef.current,
-      color: colorRef.current,
+      player_id: playerId,
       selected_index: choice.index,
     }));
   };
 
-  const stopSurrenderHold = () => {
-    if (surrenderTimerRef.current) {
-      window.clearTimeout(surrenderTimerRef.current);
-      surrenderTimerRef.current = null;
-    }
-    surrenderStartRef.current = null;
-    setSurrenderProgress(0);
-  };
-
   const handleSurrender = () => {
-    if (!wsRef.current || !roomRef.current || !colorRef.current || !playerRef.current) {
-      stopSurrenderHold();
-      return;
-    }
-
-    stopSurrenderHold();
+    if (!wsRef.current || gameOver) return;
     wsRef.current.send(JSON.stringify({
       action: 'surrender',
-      room_id: roomRef.current,
-      player_id: playerRef.current,
-      color: colorRef.current,
+      player_id: playerId,
     }));
   };
-
+  
   const handleSurrenderPressStart = () => {
-    if (!wsRef.current || !roomRef.current || !colorRef.current || !playerRef.current) {
-      return;
-    }
+    if (gameOver) return;
+    surrenderTimerRef.current = setTimeout(() => {
+      setSurrenderProgress(100);
+      handleSurrender();
+    }, 1000); // 1秒長押しで発動
+  };
 
-    surrenderStartRef.current = Date.now();
+  const stopSurrenderHold = () => {
+    clearTimeout(surrenderTimerRef.current);
     setSurrenderProgress(0);
+  };
 
-    const tick = () => {
-      const elapsed = Date.now() - surrenderStartRef.current;
-      const progress = Math.min(100, Math.round((elapsed / 1000) * 100));
-      setSurrenderProgress(progress);
-
-      if (progress >= 100) {
-        handleSurrender();
-        return;
-      }
-
-      surrenderTimerRef.current = window.setTimeout(tick, 50);
-    };
-
-    if (surrenderTimerRef.current) {
-      window.clearTimeout(surrenderTimerRef.current);
+  const returnToTitle = () => {
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
     }
-    tick();
+    window.history.pushState({}, '', window.location.pathname);
+    setRoomId(null);
+    setIsRoomCreator(false);
+    resetGame();
+    setScreen('title');
   };
 
   const isMyTurn = currentTurn === myColor;
 
   return (
     <main>
-      <audio ref={audioRef} preload="auto" />
-      <audio ref={seAudioRef} preload="auto" />
       {screen === 'title' && (
         <section className="screen">
           <div className="title-box">
@@ -389,17 +265,15 @@ export default function HomePage() {
               <input
                 id="username"
                 value={username}
-                onChange={(event) => setUsername(event.target.value)}
-                placeholder="名前を入力してください"
+                onChange={handleUsernameChange}
+                placeholder="名前を入力"
               />
             </div>
-            {/* {connectionError ? <div className="error-text">{connectionError}</div> : null} */}
-            <button className="match-btn" onClick={() => {
-              playSe('click');
-              setScreen('category');
-            }}>
-              オンライン対戦を探す
+            {connectionError && <div className="error-text">{connectionError}</div>}
+            <button className="match-btn" onClick={createRoom}>
+              部屋を作成して対戦
             </button>
+            <p style={{ marginTop: '1rem', fontSize: '0.9rem' }}>または、招待URLから参加してください。</p>
           </div>
         </section>
       )}
@@ -410,20 +284,16 @@ export default function HomePage() {
             <h2>クイズジャンルを選択</h2>
             <div className="input-group">
               <label htmlFor="category">ジャンル</label>
-              <select id="category" value={category} onChange={(event) => setCategory(event.target.value)}>
+              <select id="category" value={category} onChange={(e) => setCategory(e.target.value)} disabled={!isRoomCreator && roomId}>
                 {availableCategories.length === 0 ? (
-                  <option value="">読み込み中...</option>
+                  <option>読み込み中...</option>
                 ) : (
-                  availableCategories.map((name) => (
-                    <option key={name} value={name}>{name}</option>
-                  ))
+                  availableCategories.map((name) => <option key={name} value={name}>{name}</option>)
                 )}
               </select>
+              {(!isRoomCreator && roomId) && <p style={{fontSize: '0.8rem'}}>ジャンルは部屋のホストが選択します。</p>}
             </div>
-            <button className="match-btn" onClick={() => {
-              playSe('click');
-              startMatch();
-            }}>
+            <button className="match-btn" onClick={connectToRoom}>
               対戦を開始
             </button>
           </div>
@@ -434,7 +304,10 @@ export default function HomePage() {
         <section className="screen">
           <div className="title-box">
             <h2>対戦相手を探しています...</h2>
-            <p>{message || '少々お待ちください ⏳'}</p>
+            <p>{message}</p>
+            <button className="match-btn" onClick={copyInviteLink} style={{marginTop: '1rem'}}>
+              招待リンクをコピー
+            </button>
           </div>
         </section>
       )}
@@ -442,77 +315,62 @@ export default function HomePage() {
       {screen === 'game' && (
         <section className="screen">
           <div className="info-panel">
-            <div>プレイヤー: 先手 {playerNames[1]} / 後手 {playerNames[2]}</div>
-            <div style={{ marginTop: 6 }}>
-              あなたは: {myColor ? getColorLabel(myColor) : '-'}
-            </div>
+            <div>先手: {playerNames[1]} / 後手: {playerNames[2]}</div>
+            <div style={{ marginTop: 6 }}>あなたは: {myColor ? getColorLabel(myColor) : '-'}</div>
             <div className="status-text" style={{ color: isMyTurn ? '#dc2626' : '#1f2937' }}>
               {statusText}{isMyTurn ? ' (あなたの番です！)' : ''}
             </div>
             <div className="message-text">{message}</div>
-            {connectionError ? <div className="error-text">{connectionError}</div> : null}
-            {gameOver ? (
-              <button className="match-btn" onClick={() => {
-                playSe('click');
-                handleReturnToTitle();
-              }} style={{ marginTop: 12 }}>
+            {gameOver && (
+              <button className="match-btn" onClick={returnToTitle} style={{ marginTop: 12 }}>
                 タイトルへ戻る
               </button>
-            ) : null}
+            )}
           </div>
 
-          {question ? (
+          {question && (
             <div className="question-panel">
               <div className="difficulty-tag">難易度: {question.difficulty}</div>
               <div className="question-text">{question.question}</div>
               <div className="choices-container">
                 {question.choices.map((choice) => (
-                  <button key={`${choice.index}-${choice.label}`} className="choice-btn" onClick={() => handleAnswer(choice)}>
+                  <button key={choice.index} className="choice-btn" onClick={() => handleAnswer(choice)}>
                     {choice.label}
                   </button>
                 ))}
               </div>
             </div>
-          ) : null}
+          )}
 
-          <div className="board" role="grid" aria-label="オセロ盤">
+          <div className="board" role="grid">
             {board.map((row, y) =>
-              row.map((cellValue, x) => {
-                const isHighlighted = availableMoves.some((move) => move.x === x && move.y === y) && isMyTurn;
+              row.map((cell, x) => {
+                const isHighlight = availableMoves.some(m => m.x === x && m.y === y) && isMyTurn;
                 return (
                   <div
                     key={`${x}-${y}`}
-                    className={`cell${isHighlighted ? ' highlight' : ''}`}
+                    className={`cell${isHighlight ? ' highlight' : ''}`}
                     onClick={() => handleCellClick(x, y)}
-                    role="gridcell"
                   >
-                    {cellValue === 1 || cellValue === 2 ? (
-                      <div className={`disk ${cellValue === 1 ? 'black' : 'white'}`} />
-                    ) : null}
+                    {cell !== 0 && <div className={`disk ${cell === 1 ? 'black' : 'white'}`} />}
                   </div>
                 );
               })
             )}
           </div>
 
-          {!gameOver ? (
+          {!gameOver && (
             <button
               className="surrender-btn"
-              type="button"
               onMouseDown={handleSurrenderPressStart}
               onMouseUp={stopSurrenderHold}
               onMouseLeave={stopSurrenderHold}
               onTouchStart={handleSurrenderPressStart}
               onTouchEnd={stopSurrenderHold}
-              onTouchCancel={stopSurrenderHold}
-              onClick={(event) => event.preventDefault()}
-              style={{
-                background: `linear-gradient(135deg, #fff7ed 0%, #f59e0b ${surrenderProgress}%, #fff7ed ${surrenderProgress}%, #fff7ed 100%)`,
-              }}
             >
-              {surrenderProgress > 0 ? `長押し中... ${surrenderProgress}%` : '長押しで降参'}
+              長押しで降参
             </button>
-          ) : null}
+          )}
         </section>
       )}
     </main>

@@ -71,18 +71,18 @@ def build_surrender_payload(room, surrendering_color):
     }
 
 
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
+@app.websocket("/ws/{room_id}")
+async def websocket_endpoint(websocket: WebSocket, room_id: str):
     await websocket.accept()
 
-    async def notify_room_disconnect(room_id, disconnected_ws):
+    async def notify_room_disconnect(disconnected_ws):
         room = active_rooms.get(room_id)
         if not room:
             return
 
         remaining_players = [player for player in room["players"] if player is not disconnected_ws]
         if remaining_players:
-            del active_rooms[room_id]
+            # 相手に切断を通知
             for player in remaining_players:
                 try:
                     await player.send_text(json.dumps({
@@ -91,8 +91,9 @@ async def websocket_endpoint(websocket: WebSocket):
                     }))
                 except Exception:
                     pass
-        else:
-            active_rooms.pop(room_id, None)
+        
+        # 部屋を削除
+        active_rooms.pop(room_id, None)
 
     def build_question_prompt(room, x, y):
         cell = room["quiz_board"][y][x]
@@ -132,66 +133,77 @@ async def websocket_endpoint(websocket: WebSocket):
             payload = json.loads(data)
             action = payload.get("action")
 
-            if action == "join_queue":
-                category = payload.get("category", "一般常識")
+            if action == "join_room":
+                category = payload.get("category", "雑学")
                 username = payload.get("username", "名無し") or "名無し"
-                if category not in waiting_players:
-                    waiting_players[category] = None
-                if waiting_players[category] is None:
-                    waiting_players[category] = {"ws": websocket, "username": username}
-                    await websocket.send_text(json.dumps({"type": "waiting", "category": category}))
-                    continue
+                player_id = payload.get("player_id")
 
-                room_id = str(uuid.uuid4())
-                player1 = waiting_players[category]["ws"]
-                player2 = websocket
-                player1_name = waiting_players[category]["username"]
-                player2_name = username
-                player_id = [str(uuid.uuid4()),str(uuid.uuid4())]
-                waiting_players[category] = None
-
-                quiz_board = create_quiz_board(category)
-                room = {
-                    "players": [player1, player2],
-                    "usernames": [player1_name, player2_name],
-                    "player_ids": player_id,
-                    "board": create_initial_board(),
-                    "quiz_board": quiz_board,
-                    "category": category,
-                    "turn": 1,
-                    "pending": None,
-                    "wrong_count": 0,
-                    "attempted_positions": [],
-                }
-                active_rooms[room_id] = room
-
-                for idx, player in enumerate(room["players"], start=1):
-                    await player.send_text(json.dumps({
-                        "type": "start",
-                        "room_id": room_id,
-                        "color": idx,
-                        "board": room["board"],
-                        "turn": 1,
+                if room_id not in active_rooms:
+                    # 新しい部屋を作成
+                    quiz_board = create_quiz_board(category)
+                    room = {
+                        "players": [websocket],
+                        "usernames": [username],
+                        "player_ids": [player_id],
+                        "board": create_initial_board(),
+                        "quiz_board": quiz_board,
                         "category": category,
-                        # "quiz_board": quiz_board,
-                        "player_names": {"1": room["usernames"][0], "2": room["usernames"][1]},
-                        "player_id" : player_id[idx-1],
-                        "available_moves": get_available_moves(room["board"], room["turn"]),
+                        "turn": 1,
+                        "pending": None,
+                        "wrong_count": 0,
+                        "attempted_positions": [],
+                    }
+                    active_rooms[room_id] = room
+                    await websocket.send_text(json.dumps({
+                        "type": "waiting",
+                        "message": "対戦相手を待っています...",
+                        "room_id": room_id,
                     }))
+                else:
+                    # 既存の部屋に参加
+                    room = active_rooms[room_id]
+                    if len(room["players"]) == 1:
+                        room["players"].append(websocket)
+                        room["usernames"].append(username)
+                        room["player_ids"].append(player_id)
+
+                        # ゲーム開始を両プレイヤーに通知
+                        for idx, player in enumerate(room["players"], start=1):
+                            await player.send_text(json.dumps({
+                                "type": "start",
+                                "room_id": room_id,
+                                "color": idx,
+                                "board": room["board"],
+                                "turn": 1,
+                                "category": room["category"],
+                                "player_names": {"1": room["usernames"][0], "2": room["usernames"][1]},
+                                "player_id": room["player_ids"][idx-1],
+                                "available_moves": get_available_moves(room["board"], 1),
+                            }))
+                    else:
+                        # 部屋が満員の場合
+                        await websocket.send_text(json.dumps({
+                            "type": "error",
+                            "message": "この部屋は満員です。",
+                        }))
 
             elif action == "click_cell":
-                room_id = payload.get("room_id")
                 room = active_rooms.get(room_id)
-                if not room:
-                    continue
-                if room["pending"] is not None:
+                if not room or room.get("pending"):
                     continue
 
                 color = payload.get("color")
                 pid = payload.get("player_id")
                 x, y = payload.get("x"), payload.get("y")
-                if room["turn"] != color and room["player_ids"][color-1] != pid:
+
+                # プレイヤーのIDとターンが一致するか確認
+                try:
+                    player_index = room["player_ids"].index(pid)
+                    if player_index + 1 != color or room["turn"] != color:
+                        continue
+                except (ValueError, IndexError):
                     continue
+
                 if not (0 <= x < 6 and 0 <= y < 6):
                     continue
 
@@ -226,7 +238,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     continue
 
                 flippable = get_flippable_disks(room["board"], x, y, color)
-                if len(flippable) == 0:
+                if not flippable:
                     await websocket.send_text(json.dumps({"type": "invalid_move", "message": "その場所には石を置けません。"}))
                     continue
 
@@ -242,16 +254,19 @@ async def websocket_endpoint(websocket: WebSocket):
                 await websocket.send_text(json.dumps(prompt_payload))
 
             elif action == "answer_question":
-                room_id = payload.get("room_id")
                 room = active_rooms.get(room_id)
-                
-                if not room or room["pending"] is None:
+                if not room or not room.get("pending"):
                     continue
 
                 selected_index = payload.get("selected_index")
                 pending = room["pending"]
                 pid = payload.get("player_id")
-                if pending["player"] != payload.get("color") or room["player_ids"][pending["player"] - 1] != pid:
+
+                try:
+                    player_index = room["player_ids"].index(pid)
+                    if player_index + 1 != pending["player"]:
+                        continue
+                except (ValueError, IndexError):
                     continue
 
                 x, y = pending["x"], pending["y"]
@@ -259,14 +274,8 @@ async def websocket_endpoint(websocket: WebSocket):
                 choice_map = pending.get("choice_map", {})
                 correct_display_index = pending.get("correct_display_index")
 
-                if isinstance(choice_map, dict) and selected_index in choice_map:
-                    selected_original_index = choice_map[selected_index]
-                else:
-                    selected_original_index = None
-
+                selected_original_index = choice_map.get(selected_index)
                 is_correct = selected_original_index is not None and selected_original_index == cell["correct"]
-                if selected_original_index is None and correct_display_index is not None:
-                    is_correct = selected_index == correct_display_index
 
                 current_player = pending["player"]
                 opponent = 2 if current_player == 1 else 1
@@ -323,20 +332,15 @@ async def websocket_endpoint(websocket: WebSocket):
 
                 if not any(0 in row for row in room["board"]) and not game_over:
                     game_over = True
-                    if score["black"] > score["white"]:
-                        message += f" 黒の勝ち！ ({score['black']} 対 {score['white']})"
-                    elif score["white"] > score["black"]:
-                        message += f" 白の勝ち！ ({score['white']} 対 {score['black']})"
+                
+                if game_over:
+                    s_b, s_w = score["black"], score["white"]
+                    if s_b > s_w:
+                        message += f" 黒の勝ち！ ({s_b} 対 {s_w})"
+                    elif s_w > s_b:
+                        message += f" 白の勝ち！ ({s_w} 対 {s_b})"
                     else:
-                        message += f" 引き分け！ ({score['black']} 対 {score['white']})"
-
-                if game_over and "勝ち" not in message and "引き分け" not in message:
-                    if score["black"] > score["white"]:
-                        message += f" 黒の勝ち！ ({score['black']} 対 {score['white']})"
-                    elif score["white"] > score["black"]:
-                        message += f" 白の勝ち！ ({score['white']} 対 {score['black']})"
-                    else:
-                        message += f" 引き分け！ ({score['black']} 対 {score['white']})"
+                        message += f" 引き分け！ ({s_b} 対 {s_b})"
 
                 update_msg = json.dumps({
                     "type": "update",
@@ -351,16 +355,15 @@ async def websocket_endpoint(websocket: WebSocket):
                     await p.send_text(update_msg)
 
             elif action == "surrender":
-                room_id = payload.get("room_id")
                 room = active_rooms.get(room_id)
                 if not room:
                     continue
 
-                color = payload.get("color")
                 pid = payload.get("player_id")
-                if room["player_ids"][color-1] != pid:
-                    continue
-                if color not in (1, 2):
+                try:
+                    player_index = room["player_ids"].index(pid)
+                    color = player_index + 1
+                except (ValueError, IndexError):
                     continue
 
                 room["pending"] = None
@@ -370,22 +373,5 @@ async def websocket_endpoint(websocket: WebSocket):
                 for p in room["players"]:
                     await p.send_text(update_msg)
 
-            elif action == "request_question":
-                room_id = payload.get("room_id")
-                room = active_rooms.get(room_id)
-                if not room:
-                    continue
-                x, y = payload.get("x"), payload.get("y")
-                cell = room["quiz_board"][y][x]
-                await websocket.send_text(json.dumps(build_question_prompt(room, x, y)))
-
     except WebSocketDisconnect:
-        for room_id, room in list(active_rooms.items()):
-            if websocket in room["players"]:
-                await notify_room_disconnect(room_id, websocket)
-                break
-
-        for category, waiting in list(waiting_players.items()):
-            if waiting and waiting.get("ws") == websocket:
-                waiting_players[category] = None
-                break
+        await notify_room_disconnect(websocket)
